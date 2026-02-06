@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HCF Oceanic Winds Aloft Forecast</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; background: #222; font-family: sans-serif; overflow: hidden; }
+        #map { height: 100vh; width: 100vw; background: #222; }
+        
+        .ui-overlay {
+            position: absolute; bottom: 20px; left: 20px; z-index: 1000; width: 360px;
+            background: rgba(30, 30, 30, 0.95); color: #ccc; padding: 15px; border-radius: 8px;
+            border: 1px solid #555; display: flex; flex-direction: column; gap: 10px;
+            max-height: 90vh; overflow-y: auto;
+        }
+        
+        .report-box {
+            background: #111; border: 1px solid #444; padding: 8px; 
+            font-family: 'Consolas', monospace; font-size: 11px; color: #ccc;
+            min-height: 60px; max-height: 400px; overflow-y: auto;
+        }
+
+        .fix-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; border: 1px solid #333; }
+        .fix-table th { background: #0d6efd; color: white; text-align: left; padding: 4px; }
+        .fix-table td { border-bottom: 1px solid #333; padding: 2px 4px; color: #aaa; }
+        .fix-table tr:hover td { background: #222; color: #fff; }
+        .highlight-row td { color: #0f0; font-weight: bold; } 
+
+        h3 { margin: 0 0 5px 0; font-size: 16px; color: #fff; border-bottom: 1px solid #555; padding-bottom: 5px; }
+        label { font-size: 11px; font-weight: bold; color: #aaa; display: block; margin-top: 5px; }
+        select, input { width: 100%; background: #222; border: 1px solid #444; color: white; padding: 5px; }
+        
+        button { background: #444; color: white; border: none; padding: 8px; cursor: pointer; border-radius: 4px; width: 100%; transition: 0.2s; }
+        button:hover { filter: brightness(1.2); }
+        .btn-green { background: #198754; }
+        .btn-blue  { background: #0d6efd; }
+
+        .wind-vector-icon { background: transparent; border: none; }
+        .fix-label {
+            position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%);
+            color: black; font-weight: 900; font-size: 11px; white-space: nowrap;
+            text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff;
+            pointer-events: none; z-index: 300;
+        }
+        .vector-label {
+            position: absolute; top: 5px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.8); color: #fff; padding: 1px 4px; 
+            border-radius: 3px; font-size: 10px; font-family: monospace; 
+            white-space: nowrap; border: 1px solid #444; pointer-events: none; z-index: 200;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+
+    <div class="ui-overlay">
+        <h3>HCF Oceanic Winds Aloft Forecast</h3>
+        
+        <label>Map Display Altitude</label>
+        <select id="altitudeSelect" onchange="window.updateMapLayer()">
+            </select>
+        
+        <label>Forecast (+<span id="timeLabel">0</span>h)</label>
+        <input type="range" id="timeSlider" min="0" max="23" value="0" step="1" oninput="window.updateTime(this.value)">
+        
+        <div id="reportBox" class="report-box">Initializing...</div>
+        
+        <div style="display:flex; gap:5px; margin-top:5px;">
+            <button onclick="window.runBulkReport()" class="btn-green">Refresh All Levels</button>
+            <button onclick="window.openPrintView()" class="btn-blue">🖨️ Print View</button>
+        </div>
+        
+        <div style="font-size:10px; color:#555; margin-top:10px;">
+            Map: <span id="statusMap">Loading...</span> | CSV: <span id="statusCSV">Loading...</span>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
+
+    <script>
+        // ================= CONFIGURATION =================
+        const MAP_IMAGE = 'map.png';
+        const MAP_PGW   = 'map.pgw';
+        const MAP_PROJ  = 'EPSG:3857'; 
+        const CSV_FILE  = 'Designated_Point.csv';
+        const TARGET_FIXES = ["ZIGIE", "APACK", "BITTA", "CLUTS", "DENNS", "EBBER", "FITES", "SCOON", "DOVRR", "CARRP", "CHOKO", "KATHS", "HOOPA", "SYVAD", "CANON", "DANNO", "THOMA"];
+        
+        const LEVELS = [
+            { id: '10m', label: 'Surface' },
+            { id: '1000hPa', label: '300 ft' },
+            { id: '950hPa', label: '2,000 ft' },
+            { id: '925hPa', label: '2,500 ft' },
+            { id: '900hPa', label: '3,000 ft' },
+            { id: '850hPa', label: '5,000 ft' },
+            { id: '800hPa', label: '6,000 ft' },
+            { id: '700hPa', label: '10,000 ft' },
+            { id: '600hPa', label: '14,000 ft' },
+            { id: '500hPa', label: 'FL 180' },
+            { id: '400hPa', label: 'FL 240' },
+            { id: '300hPa', label: 'FL 300' },
+            { id: '250hPa', label: 'FL 340' },
+            { id: '200hPa', label: 'FL 390' },
+            { id: '150hPa', label: 'FL 450' },
+            { id: '100hPa', label: 'FL 530' }
+        ];
+
+        const sel = document.getElementById('altitudeSelect');
+        LEVELS.forEach(l => {
+            const opt = document.createElement('option');
+            opt.value = l.id; opt.innerText = l.label;
+            if(l.id === '250hPa') opt.selected = true;
+            sel.appendChild(opt);
+        });
+        // =================================================
+
+        window.WAYPOINTS = [];
+        window.FULL_DATASET = [];
+        window.CURRENT_HOUR = 0;
+        const MAG_VAR = 9;
+
+        // --- MAP SETUP ---
+        proj4.defs("EPSG:3857","+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext  +no_defs");
+        const map = L.map('map', { center: [21.0, -157.0], zoom: 6, crs: L.CRS.EPSG3857 });
+
+        (async function initMap() {
+            try {
+                const resp = await fetch(MAP_PGW);
+                if(!resp.ok) throw new Error("PGW Not Found");
+                const txt = await resp.text();
+                const img = new Image();
+                img.onload = () => { applyGeo(txt, img.width, img.height); document.getElementById('statusMap').innerText = "OK"; document.getElementById('statusMap').style.color = "#0f0"; };
+                img.src = MAP_IMAGE;
+            } catch(e) { /* Err */ }
+        })();
+
+        function applyGeo(pgw, w, h) {
+            const l = pgw.trim().split(/\s+/).map(Number);
+            const dest = 'EPSG:4326'; 
+            const nw = proj4(MAP_PROJ, dest, [l[4], l[5]]); 
+            const se = proj4(MAP_PROJ, dest, [l[4] + (w * l[0]), l[5] + (h * l[3])]); 
+            const bounds = [[nw[1], nw[0]], [se[1], se[0]]];
+            L.imageOverlay(MAP_IMAGE, bounds, { opacity: 1.0 }).addTo(map);
+            map.fitBounds(bounds);
+        }
+
+        (async function loadData() {
+            try {
+                const resp = await fetch(CSV_FILE);
+                if(!resp.ok) throw new Error("CSV Not Found");
+                const text = await resp.text();
+                parseCSV(text);
+                document.getElementById('statusCSV').innerText = "OK";
+                document.getElementById('statusCSV').style.color = "#0f0";
+            } catch (e) { document.getElementById('reportBox').innerText = "Error loading CSV"; }
+        })();
+
+        function parseCSV(text) {
+            const lines = text.split('\n');
+            const headers = lines[0].split(',').map(h => h.trim().toUpperCase());
+            const idxName = headers.indexOf('IDENT');
+            const idxLat = headers.indexOf('LATITUDE');
+            const idxLon = headers.indexOf('LONGITUDE');
+            const targets = new Set(TARGET_FIXES);
+
+            for(let i=1; i<lines.length; i++) {
+                const cols = lines[i].split(',');
+                if(cols.length > idxLon && targets.has(cols[idxName].trim())) {
+                    window.WAYPOINTS.push({ 
+                        name: cols[idxName].trim(), 
+                        lat: parseDMS(cols[idxLat]), 
+                        lon: parseDMS(cols[idxLon]) 
+                    });
+                }
+            }
+            window.WAYPOINTS.sort((a,b) => TARGET_FIXES.indexOf(a.name) - TARGET_FIXES.indexOf(b.name));
+            if(window.WAYPOINTS.length) window.runBulkReport();
+        }
+
+        function parseDMS(dmsStr) {
+            if (!dmsStr) return NaN;
+            const parts = dmsStr.trim().split(/[- ]+/);
+            if(parts.length < 3) return parseFloat(dmsStr);
+            let val = parseFloat(parts[0]) + (parseFloat(parts[1])/60) + (parseFloat(parts[2])/3600);
+            if(dmsStr.includes('S') || dmsStr.includes('W')) val *= -1;
+            return val;
+        }
+
+        // --- FETCH LOGIC ---
+        window.runBulkReport = async function() {
+            if(!window.WAYPOINTS.length) return;
+            document.getElementById('reportBox').innerHTML = "<div style='color:orange'>Fetching ALL altitude data...</div>";
+            
+            const lats = window.WAYPOINTS.map(w => w.lat).join(',');
+            const lons = window.WAYPOINTS.map(w => w.lon).join(',');
+            
+            let vars = [];
+            LEVELS.forEach(l => {
+                const s = (l.id === '10m') ? 'windspeed_10m' : `windspeed_${l.id}`;
+                const d = (l.id === '10m') ? 'winddirection_10m' : `winddirection_${l.id}`;
+                vars.push(s, d);
+            });
+
+            const url = `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}&hourly=${vars.join(',')}&forecast_days=1&timezone=GMT`;
+            
+            try {
+                const resp = await fetch(url);
+                const json = await resp.json();
+                const res = Array.isArray(json) ? json : [json];
+                
+                window.FULL_DATASET = res.map((item, i) => {
+                    const wpData = { wp: window.WAYPOINTS[i], levels: {} };
+                    LEVELS.forEach(l => {
+                        const sKey = (l.id === '10m') ? 'windspeed_10m' : `windspeed_${l.id}`;
+                        const dKey = (l.id === '10m') ? 'winddirection_10m' : `winddirection_${l.id}`;
+                        wpData.levels[l.id] = {
+                            speeds: item.hourly[sKey],
+                            dirs: item.hourly[dKey]
+                        };
+                    });
+                    wpData.times = item.hourly.time;
+                    return wpData;
+                });
+                renderReport();
+                window.updateMapLayer();
+            } catch(e) { document.getElementById('reportBox').innerText = "API Error: " + e; }
+        };
+
+        // --- RENDER SIDEBAR REPORT ---
+        function renderReport() {
+            const reportBox = document.getElementById('reportBox');
+            reportBox.innerHTML = "";
+            
+            const now = new Date();
+            const timeStr = `${String(now.getUTCHours()).padStart(2,'0')}${String(now.getUTCMinutes()).padStart(2,'0')}Z`;
+            reportBox.innerHTML += `<div style="color:#0f0; margin-bottom:10px; font-weight:bold;">RETRIEVED: ${timeStr}</div>`;
+            const currentMapAlt = document.getElementById('altitudeSelect').value;
+
+            window.FULL_DATASET.forEach(data => {
+                let html = `<table class="fix-table">
+                    <thead><tr><th colspan="2">${data.wp.name}</th></tr></thead><tbody>`;
+
+                LEVELS.forEach(l => {
+                    const idx = Math.min(window.CURRENT_HOUR, data.levels[l.id].speeds.length-1);
+                    const k = Math.round(data.levels[l.id].speeds[idx] * 0.539957);
+                    const dir = data.levels[l.id].dirs[idx];
+                    const hlClass = (l.id === currentMapAlt) ? 'class="highlight-row"' : '';
+                    html += `<tr ${hlClass}><td>${l.label}</td><td style="text-align:right">${formatAv(dir, k)}</td></tr>`;
+                });
+                html += `</tbody></table>`;
+                reportBox.innerHTML += html;
+            });
+        }
+
+        // --- UPDATE MAP ---
+        window.updateMapLayer = function() {
+            const altID = document.getElementById('altitudeSelect').value;
+            renderReport(); 
+            map.eachLayer(layer => { if (layer instanceof L.Marker) map.removeLayer(layer); });
+
+            window.FULL_DATASET.forEach(d => {
+                if (!d.levels[altID]) return;
+                const idx = Math.min(window.CURRENT_HOUR, d.levels[altID].speeds.length-1);
+                const k = Math.round(d.levels[altID].speeds[idx] * 0.539957);
+                const dir = d.levels[altID].dirs[idx];
+                const svg = getBarbSVG(k, '#00bfff');
+                const rotation = dir;
+                const windStr = formatAv(dir, k);
+
+                const html = `
+                    <div style="position:relative; width:45px; height:45px;">
+                        <div class="fix-label">${d.wp.name}</div>
+                        <div style="transform: rotate(${rotation}deg); transform-origin: 22.5px 45px; width:45px; height:45px;">${svg}</div>
+                        <div class="vector-label">${windStr}</div>
+                    </div>`;
+
+                L.marker([d.wp.lat, d.wp.lon], { 
+                    zIndexOffset: 2000,
+                    icon: L.divIcon({ className: 'wind-vector-icon', html: html, iconSize: [45, 45], iconAnchor: [22.5, 45] })
+                }).addTo(map);
+            });
+        };
+
+        // --- HELPER: AVIATION WIND CODE FORMAT ---
+        function formatCode(dir, k) {
+            let mDir = Math.round(dir - MAG_VAR);
+            if (mDir < 0) mDir += 360;
+            if (mDir >= 360) mDir -= 360;
+            if (k < 5) return "9900"; 
+            let d = Math.round(mDir / 10) * 10;
+            if (d === 0) d = 360; 
+            let dCode = Math.floor(d / 10);
+            if (k >= 100 && k < 200) { dCode += 50; k -= 100; } 
+            else if (k >= 200) { dCode += 50; k = 99; }
+            return `${String(dCode).padStart(2, '0')}${String(k).padStart(2, '0')}`;
+        }
+
+        // --- PRINT VIEW GENERATOR ---
+        window.openPrintView = function() {
+            if(!window.FULL_DATASET.length) return alert("Please fetch data first.");
+            
+            const now = new Date();
+            const timeStr = `${String(now.getUTCHours()).padStart(2,'0')}${String(now.getUTCMinutes()).padStart(2,'0')}Z`;
+            const dateStr = `${String(now.getUTCMonth()+1).padStart(2,'0')}/${String(now.getUTCDate()).padStart(2,'0')}/${String(now.getUTCFullYear()).slice(-2)}`;
+            const fcstHour = document.getElementById('timeLabel').innerText;
+
+            const sector1 = ["ZIGIE", "APACK", "BITTA", "CLUTS", "DENNS", "EBBER", "FITES", "SCOON"];
+            const sector2 = ["DOVRR", "CARRP", "CHOKO", "KATHS", "HOOPA", "SYVAD", "CANON", "DANNO", "THOMA"];
+            
+            const printLevels = LEVELS.slice(7); 
+
+            function renderGroup(title, fixList) {
+                let html = `<div class="page-section">
+                    <h1>${title} &nbsp; | &nbsp; Forecast: +${fcstHour}h &nbsp; | &nbsp; Retrieved: ${timeStr} ${dateStr}</h1>
+                    <div class="grid-container">`;
+                
+                const sectorData = fixList.map(name => window.FULL_DATASET.find(d => d.wp.name === name)).filter(x => x);
+
+                sectorData.forEach(data => {
+                    html += `<div class="fix-block"><div class="fix-header">${data.wp.name}</div><table>`;
+                    printLevels.forEach(l => {
+                        const idx = Math.min(window.CURRENT_HOUR, data.levels[l.id].speeds.length-1);
+                        const k = Math.round(data.levels[l.id].speeds[idx] * 0.539957);
+                        const dir = data.levels[l.id].dirs[idx];
+                        const code = formatCode(dir, k);
+                        html += `<tr><td>${l.label}</td><td>${code}</td></tr>`;
+                    });
+                    html += `</table></div>`;
+                });
+                html += `</div></div>`;
+                return html;
+            }
+
+            let htmlContent = `<html><head><title>HCF Oceanic Winds Aloft Forecast - ${timeStr}</title>
+            <style>
+                /* LARGE FONT FOR READABILITY */
+                body { font-family: sans-serif; padding: 20px; font-size: 14px; }
+                h1 { font-size: 18px; border-bottom: 2px solid #444; padding-bottom: 5px; margin-bottom: 15px; }
+                
+                .grid-container { 
+                    display: grid; 
+                    grid-template-columns: repeat(4, 1fr); 
+                    gap: 15px; 
+                }
+                .fix-block { border: 1px solid #000; break-inside: avoid; }
+                
+                /* Large Bold Headers for Fixes */
+                .fix-header { background: #333; color: white; font-weight: bold; text-align: center; padding: 5px; font-size: 16px; }
+                
+                table { width: 100%; border-collapse: collapse; font-size: 14px; }
+                td { border-bottom: 1px solid #ccc; padding: 3px 6px; font-family: monospace; font-weight: bold; }
+                td:last-child { text-align: right; }
+                tr:nth-child(even) { background: #eee; }
+                
+                @media print {
+                    .page-break { page-break-after: always; display: block; height: 1px; }
+                }
+            </style>
+            </head><body>`;
+
+            htmlContent += renderGroup("HCF Oceanic Winds Aloft Forecast - Sector 7/8", sector1);
+            htmlContent += `<div class="page-break"></div>`;
+            htmlContent += renderGroup("HCF Oceanic Winds Aloft Forecast - Sector 2/6", sector2);
+            htmlContent += `<script>window.print();<\/script></body></html>`;
+
+            const win = window.open("", "_blank");
+            win.document.write(htmlContent);
+            win.document.close();
+        };
+
+        window.updateTime = (v) => { window.CURRENT_HOUR = parseInt(v); document.getElementById('timeLabel').innerText = v; window.updateMapLayer(); };
+        function formatAv(d,k) { let m = Math.round(d-MAG_VAR); if(m<0)m+=360; if(m>=360)m-=360; return `${String(m).padStart(3,'0')}°${String(k).padStart(3,'0')}KT`; }
+
+        function getBarbSVG(k,c) {
+            let r=Math.round(k/5)*5, p="M 22.5 45 L 22.5 5 ", y=5;
+            if(r>20)c='#00ff00'; if(r>40)c='#ffff00'; if(r>65)c='#ff4444';
+            while(r>=50){p+=`M 22.5 ${y} L 38 ${y+5} L 22.5 ${y+10} `;y+=12;r-=50;}
+            while(r>=10){p+=`M 22.5 ${y} L 38 ${y-5} `;y+=5;r-=10;}
+            if(r>=5)p+=`M 22.5 ${y} L 30 ${y-2.5} `;
+            return `<svg xmlns="http://www.w3.org/2000/svg" width="45" height="45" viewBox="0 0 45 45" style="overflow:visible;"><path d="${p}" stroke="black" stroke-width="4" fill="black" stroke-linecap="round" stroke-linejoin="round"/><path d="${p}" stroke="${c}" stroke-width="2" fill="${c}" stroke-linecap="round" stroke-linejoin="round"/><circle cx="22.5" cy="45" r="3" fill="black"/><circle cx="22.5" cy="45" r="1.5" fill="${c}"/></svg>`;
+        }
+    </script>
+</body>
+</html>
