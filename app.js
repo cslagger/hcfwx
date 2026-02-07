@@ -1,94 +1,136 @@
-window.openPrintView = async function() {
-    if(!window.FULL_DATASET.length) return alert("Please fetch data first.");
-    
-    // Fetch HF Frequencies
-    let hfData = {};
+// ================= CONFIGURATION =================
+const MAP_IMAGE = 'map.png';
+const MAP_PGW   = 'map.pgw';
+const MAP_PROJ  = 'EPSG:3857'; 
+const CSV_FILE  = 'Designated_Point.csv';
+const TARGET_FIXES = ["ZIGIE", "APACK", "BITTA", "CLUTS", "DENNS", "EBBER", "FITES", "SCOON", "DOVRR", "CARRP", "CHOKO", "KATHS", "HOOPA", "SYVAD", "CANON", "DANNO", "THOMA"];
+
+const LEVELS = [
+    { id: '10m', label: 'Surface' }, { id: '1000hPa', label: '300 ft' }, { id: '950hPa', label: '2,000 ft' },
+    { id: '925hPa', label: '2,500 ft' }, { id: '900hPa', label: '3,000 ft' }, { id: '850hPa', label: '5,000 ft' },
+    { id: '800hPa', label: '6,000 ft' }, { id: '700hPa', label: '10,000 ft' }, { id: '600hPa', label: '14,000 ft' },
+    { id: '500hPa', label: 'FL 180' }, { id: '400hPa', label: 'FL 240' }, { id: '300hPa', label: 'FL 300' },
+    { id: '250hPa', label: 'FL 340' }, { id: '200hPa', label: 'FL 390' }, { id: '150hPa', label: 'FL 450' },
+    { id: '100hPa', label: 'FL 530' }
+];
+
+// Initialize Altitude Dropdown
+const sel = document.getElementById('altitudeSelect');
+if (sel) {
+    LEVELS.forEach(l => {
+        const opt = document.createElement('option');
+        opt.value = l.id; opt.innerText = l.label;
+        if(l.id === '250hPa') opt.selected = true;
+        sel.appendChild(opt);
+    });
+}
+
+// ================= GLOBALS =================
+window.WAYPOINTS = [];
+window.FULL_DATASET = [];
+window.CURRENT_HOUR = 0;
+const MAG_VAR = 9;
+
+// --- MAP SETUP ---
+if(typeof proj4 !== 'undefined') {
+    proj4.defs("EPSG:3857","+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext  +no_defs");
+}
+
+const map = L.map('map', { center: [21.0, -157.0], zoom: 6, crs: L.CRS.EPSG3857 });
+let windLayer = L.layerGroup().addTo(map);
+let pirepLayer = L.layerGroup(); 
+
+// --- INITIALIZATION ---
+(async function initMap() {
     try {
-        const resp = await fetch(`hf_freqs.json?t=${Date.now()}`);
-        if(resp.ok) hfData = await resp.json();
-    } catch(e) { console.log("No HF Data found"); }
+        const resp = await fetch(MAP_PGW);
+        if(!resp.ok) throw new Error("PGW Not Found");
+        const txt = await resp.text();
+        const img = new Image();
+        img.onload = () => { applyGeo(txt, img.width, img.height); document.getElementById('statusMap').innerText = "OK"; document.getElementById('statusMap').style.color = "#0f0"; };
+        img.src = MAP_IMAGE;
+    } catch(e) { /* Silent fail for map img */ }
+})();
 
-    const now = new Date();
-    const timeStr = `${String(now.getUTCHours()).padStart(2,'0')}${String(now.getUTCMinutes()).padStart(2,'0')}Z`;
-    const dateStr = `${String(now.getUTCMonth()+1).padStart(2,'0')}/${String(now.getUTCDate()).padStart(2,'0')}/${String(now.getUTCFullYear()).slice(-2)}`;
-    const fcstHour = document.getElementById('timeLabel').innerText;
-    
-    const sector1 = ["ZIGIE", "APACK", "BITTA", "CLUTS", "DENNS", "EBBER", "FITES", "SCOON"];
-    const sector2 = ["DOVRR", "CARRP", "CHOKO", "KATHS", "HOOPA", "SYVAD", "CANON", "DANNO", "THOMA"];
-    const printLevels = LEVELS.slice(7); 
+function applyGeo(pgw, w, h) {
+    const l = pgw.trim().split(/\s+/).map(Number);
+    const dest = 'EPSG:4326'; 
+    const nw = proj4(MAP_PROJ, dest, [l[4], l[5]]); 
+    const se = proj4(MAP_PROJ, dest, [l[4] + (w * l[0]), l[5] + (h * l[3])]); 
+    const bounds = [[nw[1], nw[0]], [se[1], se[0]]];
+    L.imageOverlay(MAP_IMAGE, bounds, { opacity: 1.0 }).addTo(map);
+    map.fitBounds(bounds);
+}
 
-    // Helper to generate HF HTML list
-    function getHfHtml(keys) {
-        let html = '<div class="hf-box">';
-        let hasData = false;
-        keys.forEach(key => {
-            if(hfData[key] && hfData[key].length > 0) {
-                hasData = true;
-                hfData[key].forEach(line => {
-                    // Simple styling to separate header from freqs
-                    const parts = line.split('|');
-                    const head = parts[0];
-                    const tail = parts.slice(1).join(' | ');
-                    html += `<div style="margin-bottom:2px;"><strong>${head}</strong> ${tail}</div>`;
-                });
-            }
-        });
-        html += '</div>';
-        return hasData ? html : ''; 
-    }
+(async function loadData() {
+    try {
+        const resp = await fetch(CSV_FILE);
+        if(!resp.ok) throw new Error("CSV Not Found");
+        const text = await resp.text();
+        parseCSV(text);
+        document.getElementById('statusCSV').innerText = "OK";
+        document.getElementById('statusCSV').style.color = "#0f0";
+    } catch (e) { document.getElementById('reportBox').innerText = "Error loading CSV: " + e.message; }
+})();
 
-    function renderGroup(title, fixList, hfKeys) {
-        let html = `<div class="page-section"><h1>${title} &nbsp; | &nbsp; Forecast: +${fcstHour}h &nbsp; | &nbsp; Retrieved: ${timeStr} ${dateStr}</h1>`;
-        
-        // Add HF Data if present
-        const hfContent = getHfHtml(hfKeys);
-        if (hfContent) {
-            html += `<div style="margin-bottom:10px; border:1px solid #444; padding:8px; font-size:11px; background:#f9f9f9;">
-                <div style="font-weight:bold; border-bottom:1px solid #ccc; margin-bottom:4px;">PACIFIC HF ASSIGNMENTS</div>
-                ${hfContent}
-            </div>`;
-        }
+function parseCSV(text) {
+    const lines = text.split('\n');
+    const headers = lines[0].split(',').map(h => h.trim().toUpperCase());
+    const idxName = headers.indexOf('IDENT');
+    const idxLat = headers.indexOf('LATITUDE');
+    const idxLon = headers.indexOf('LONGITUDE');
+    const targets = new Set(TARGET_FIXES);
 
-        html += `<div class="grid-container">`;
-        const sectorData = fixList.map(name => window.FULL_DATASET.find(d => d.wp.name === name)).filter(x => x);
-        sectorData.forEach(data => {
-            html += `<div class="fix-block"><div class="fix-header">${data.wp.name}</div><table>`;
-            printLevels.forEach(l => {
-                const idx = Math.min(window.CURRENT_HOUR, data.levels[l.id].speeds.length-1);
-                const k = Math.round(data.levels[l.id].speeds[idx] * 0.539957);
-                const dir = data.levels[l.id].dirs[idx];
-                html += `<tr><td>${l.label}</td><td>${formatCode(dir, k)}</td></tr>`;
+    for(let i=1; i<lines.length; i++) {
+        const cols = lines[i].split(',');
+        if(cols.length > idxLon && targets.has(cols[idxName].trim())) {
+            window.WAYPOINTS.push({ 
+                name: cols[idxName].trim(), 
+                lat: parseDMS(cols[idxLat]), 
+                lon: parseDMS(cols[idxLon]) 
             });
-            html += `</table></div>`;
-        });
-        html += `</div></div>`;
-        return html;
+        }
     }
+    window.WAYPOINTS.sort((a,b) => TARGET_FIXES.indexOf(a.name) - TARGET_FIXES.indexOf(b.name));
+    if(window.WAYPOINTS.length) window.runBulkReport();
+}
 
-    let htmlContent = `<html><head><title>HCF Oceanic Winds Aloft Forecast - ${timeStr}</title><style>
-        body { font-family: sans-serif; padding: 20px; font-size: 14px; }
-        h1 { font-size: 18px; border-bottom: 2px solid #444; padding-bottom: 5px; margin-bottom: 15px; }
-        .grid-container { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; }
-        .fix-block { border: 1px solid #000; break-inside: avoid; }
-        .fix-header { background: #333; color: white; font-weight: bold; text-align: center; padding: 5px; font-size: 16px; }
-        table { width: 100%; border-collapse: collapse; font-size: 14px; }
-        td { border-bottom: 1px solid #ccc; padding: 3px 6px; font-family: monospace; font-weight: bold; }
-        td:last-child { text-align: right; }
-        tr:nth-child(even) { background: #eee; }
-        .hf-box { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-family: monospace; }
-        @media print { .page-break { page-break-after: always; display: block; height: 1px; } }
-    </style></head><body>`;
+function parseDMS(dmsStr) {
+    if (!dmsStr) return NaN;
+    const parts = dmsStr.trim().split(/[- ]+/);
+    if(parts.length < 3) return parseFloat(dmsStr);
+    let val = parseFloat(parts[0]) + (parseFloat(parts[1])/60) + (parseFloat(parts[2])/3600);
+    if(dmsStr.includes('S') || dmsStr.includes('W')) val *= -1;
+    return val;
+}
 
-    // Page 1: Sector 7/8
-    htmlContent += renderGroup("HCF Oceanic Winds Aloft Forecast - Sector 7/8", sector1, ["hwn_cal_major", "hwn_cal_other", "hwn_pacnw", "hwn_south", "hwn_alaska", "notes"]);
+window.runBulkReport = async function() {
+    if(!window.WAYPOINTS.length) return;
+    document.getElementById('reportBox').innerHTML = "<div style='color:orange'>Fetching ALL altitude data...</div>";
     
-    htmlContent += `<div class="page-break"></div>`;
+    const lats = window.WAYPOINTS.map(w => w.lat).join(',');
+    const lons = window.WAYPOINTS.map(w => w.lon).join(',');
     
-    // Page 2: Sector 2/6
-    htmlContent += renderGroup("HCF Oceanic Winds Aloft Forecast - Sector 2/6", sector2, ["hwn_west", "hwn_south", "notes"]);
+    let vars = [];
+    LEVELS.forEach(l => {
+        const s = (l.id === '10m') ? 'windspeed_10m' : `windspeed_${l.id}`;
+        const d = (l.id === '10m') ? 'winddirection_10m' : `winddirection_${l.id}`;
+        vars.push(s, d);
+    });
+
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}&hourly=${vars.join(',')}&forecast_days=1&timezone=GMT`;
     
-    htmlContent += `<script>window.print();<\/script></body></html>`;
-    const win = window.open("", "_blank");
-    win.document.write(htmlContent);
-    win.document.close();
-};
+    try {
+        const resp = await fetch(url);
+        const json = await resp.json();
+        const res = Array.isArray(json) ? json : [json];
+        
+        window.FULL_DATASET = res.map((item, i) => {
+            const wpData = { wp: window.WAYPOINTS[i], levels: {} };
+            LEVELS.forEach(l => {
+                const sKey = (l.id === '10m') ? 'windspeed_10m' : `windspeed_${l.id}`;
+                const dKey = (l.id === '10m') ? 'winddirection_10m' : `winddirection_${l.id}`;
+                wpData.levels[l.id] = { speeds: item.hourly[sKey], dirs: item.hourly[dKey] };
+            });
+            wpData.times = item.hourly.time;
+            return wpData;
