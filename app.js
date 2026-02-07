@@ -71,7 +71,7 @@ function applyGeo(pgw, w, h) {
         document.getElementById('statusCSV').innerText = "OK";
         document.getElementById('statusCSV').style.color = "#0f0";
     } catch (e) { document.getElementById('reportBox').innerText = "Error loading CSV: " + e.message; }
-})();
+        })();
 
 function parseCSV(text) {
     const lines = text.split('\n');
@@ -134,3 +134,219 @@ window.runBulkReport = async function() {
             });
             wpData.times = item.hourly.time;
             return wpData;
+        });
+        renderReport();
+        window.updateMapLayer();
+    } catch(e) { document.getElementById('reportBox').innerText = "API Error: " + e; }
+};
+
+// --- PIREP HELPERS ---
+function getPirepConditions(raw) {
+    if (!raw) return "Flight Info";
+    const r = raw.toUpperCase();
+    let c = [];
+    if (r.includes("LLWS")) c.push("Wind Shear");
+    if (r.includes("TS") || r.includes("TSRA")) c.push("Thunderstorm");
+    if (r.includes("VA")) c.push("Volcanic Ash");
+    if (/TB|TURB/.test(r)) c.push("Turbulence");
+    if (/IC|ICG/.test(r)) c.push("Icing");
+    if ((/OVC|BKN|SCT|FEW|SK/.test(r)) && c.length === 0) c.push("Sky Condition");
+    if (c.length === 0) return "Routine Report";
+    return c.join(", ");
+}
+
+function getPirepTimeData(raw) {
+    const match = raw && raw.match(/(?:^|[\s/])TM\s+(\d{4})/);
+    if (!match) return { displayTime: "N/A", age: null };
+    
+    const timeStr = match[1];
+    const hours = parseInt(timeStr.slice(0, 2), 10);
+    const mins = parseInt(timeStr.slice(2), 10);
+    
+    const now = new Date();
+    const pirepDate = new Date();
+    pirepDate.setUTCHours(hours, mins, 0, 0);
+    
+    if (pirepDate > now && (pirepDate - now) < 43200000) { 
+    } else if (pirepDate > now) {
+       pirepDate.setUTCDate(pirepDate.getUTCDate() - 1);
+    }
+    
+    const diffMs = now - pirepDate;
+    const ageMin = Math.floor(diffMs / 60000);
+    
+    return { 
+        displayTime: `${timeStr}Z`, 
+        age: ageMin >= 0 ? ageMin : 0 
+    };
+}
+
+window.togglePIREPs = async function() {
+    const btn = document.getElementById('btnPirep');
+    
+    if (map.hasLayer(pirepLayer)) {
+        map.removeLayer(pirepLayer);
+        btn.style.filter = "brightness(1)";
+        btn.innerText = "✈️ Show PIREPs";
+    } else {
+        btn.innerText = "⏳ Loading...";
+        const targetUrl = `pireps.json?t=${Date.now()}`;
+        
+        try {
+            const resp = await fetch(targetUrl);
+            if (!resp.ok) throw new Error("Missing pireps.json");
+            const data = await resp.json();
+            
+            if (data.generated_at) {
+                const statusEl = document.getElementById('pirepStatus');
+                if(statusEl) statusEl.innerText = `PIREP Last Updated: ${data.generated_at}`;
+            }
+
+            if (!data.features || data.features.length === 0) {
+                alert("No PIREPs found.");
+                btn.innerText = "✈️ Show PIREPs";
+                return;
+            }
+            
+            pirepLayer.clearLayers();
+            L.circle([21.318, -157.922], { color: 'rgba(255, 255, 255, 0.3)', fillColor: 'transparent', weight: 1, dashArray: '5, 5', radius: 463000 }).addTo(pirepLayer);
+
+            L.geoJSON(data, {
+                pointToLayer: function (feature, latlng) {
+                    const p = feature.properties;
+                    const isUrgent = p.type === 'UUA';
+                    const raw = (p.rawOb || "").toUpperCase();
+                    const needsSolicit = /(TB|TURB).*(MDT|SEV|EXTRM)|(IC|ICG).*(LGT|MOD|SEV)|TS|LLWS|VA/.test(raw) || isUrgent;
+                    const symbol = needsSolicit ? '!' : '';
+                    const timeData = getPirepTimeData(p.rawOb);
+                    const age = timeData.age !== null ? timeData.age : p.age; 
+                    
+                    let colorClass = 'pirep-green'; 
+                    if (isUrgent) { colorClass = 'pirep-urgent'; } 
+                    else if (age > 90) { colorClass = 'pirep-grey'; }
+                    else if (age > 60) { colorClass = 'pirep-orange'; }
+
+                    return L.marker(latlng, { icon: L.divIcon({ className: `pirep-base ${colorClass}`, html: symbol, iconSize: [14, 14], iconAnchor: [7, 7] }) });
+                },
+                onEachFeature: function (feature, layer) {
+                    const p = feature.properties;
+                    const conditionText = getPirepConditions(p.rawOb);
+                    const timeData = getPirepTimeData(p.rawOb);
+                    const age = timeData.age !== null ? timeData.age : p.age;
+                    let ageClass = 'pirep-popup-age-fresh';
+                    if (age > 90) ageClass = 'pirep-popup-age-expired';
+                    else if (age > 60) ageClass = 'pirep-popup-age-old';
+                    const headerClass = p.type === 'UUA' ? 'header-urgent' : 'header-routine';
+
+                    const popupContent = `
+                        <div style="font-family:monospace; font-size:12px; color:black; min-width: 220px;">
+                            <strong class="${headerClass}">PIREP: ${conditionText}</strong><br>
+                            <span style="color:#555;">Alt: ${p.alt > 0 ? p.alt + 'ft' : 'Unknown'}</span><br>
+                            <div style="margin-top:2px;">
+                                <span style="color:black; font-weight:bold;">${timeData.displayTime}</span>
+                                <span style="color:#ccc;"> | </span>
+                                <span class="${ageClass}">Age: ${age}m</span>
+                            </div>
+                            <hr style="margin:4px 0; border:0; border-top:1px solid #ccc;">
+                            ${p.rawOb || "No raw text"}
+                        </div>`;
+                    layer.bindPopup(popupContent);
+                }
+            }).addTo(pirepLayer);
+            
+            map.addLayer(pirepLayer);
+            btn.style.filter = "brightness(1.3)"; 
+            btn.innerText = "Hide PIREPs";
+            
+        } catch(e) { console.error(e); alert("Could not load PIREPs."); btn.innerText = "✈️ Show PIREPs"; }
+    }
+};
+
+function renderReport() {
+    const reportBox = document.getElementById('reportBox');
+    if (!reportBox) return;
+    reportBox.innerHTML = "";
+    const now = new Date();
+    const timeStr = `${String(now.getUTCHours()).padStart(2,'0')}${String(now.getUTCMinutes()).padStart(2,'0')}Z`;
+    reportBox.innerHTML += `<div style="color:#0f0; margin-bottom:10px; font-weight:bold;">RETRIEVED: ${timeStr}</div>`;
+    const currentMapAlt = document.getElementById('altitudeSelect').value;
+
+    window.FULL_DATASET.forEach(data => {
+        let html = `<table class="fix-table"><thead><tr><th colspan="2">${data.wp.name}</th></tr></thead><tbody>`;
+        LEVELS.forEach(l => {
+            const idx = Math.min(window.CURRENT_HOUR, data.levels[l.id].speeds.length-1);
+            const k = Math.round(data.levels[l.id].speeds[idx] * 0.539957);
+            const dir = data.levels[l.id].dirs[idx];
+            const hlClass = (l.id === currentMapAlt) ? 'class="highlight-row"' : '';
+            html += `<tr ${hlClass}><td>${l.label}</td><td style="text-align:right">${formatAv(dir, k)}</td></tr>`;
+        });
+        html += `</tbody></table>`;
+        reportBox.innerHTML += html;
+    });
+}
+
+window.updateMapLayer = function() {
+    const altID = document.getElementById('altitudeSelect').value;
+    renderReport(); 
+    windLayer.clearLayers(); 
+    window.FULL_DATASET.forEach(d => {
+        if (!d.levels[altID]) return;
+        const idx = Math.min(window.CURRENT_HOUR, d.levels[altID].speeds.length-1);
+        const k = Math.round(d.levels[altID].speeds[idx] * 0.539957);
+        const dir = d.levels[altID].dirs[idx];
+        const svg = getBarbSVG(k, '#00bfff');
+        const rotation = dir;
+        const windStr = formatAv(dir, k);
+        const html = `<div style="position:relative; width:45px; height:45px;"><div class="fix-label">${d.wp.name}</div><div style="transform: rotate(${rotation}deg); transform-origin: 22.5px 45px; width:45px; height:45px;">${svg}</div><div class="vector-label">${windStr}</div></div>`;
+        L.marker([d.wp.lat, d.wp.lon], { zIndexOffset: 1000, icon: L.divIcon({ className: 'wind-vector-icon', html: html, iconSize: [45, 45], iconAnchor: [22.5, 45] }) }).addTo(windLayer);
+    });
+};
+
+window.updateTime = (v) => { window.CURRENT_HOUR = parseInt(v); document.getElementById('timeLabel').innerText = v; window.updateMapLayer(); };
+function formatAv(d,k) { let m = Math.round(d-MAG_VAR); if(m<0)m+=360; if(m>=360)m-=360; return `${String(m).padStart(3,'0')}°${String(k).padStart(3,'0')}KT`; }
+function getBarbSVG(k,c) {
+    let r=Math.round(k/5)*5, p="M 22.5 45 L 22.5 5 ", y=5;
+    if(r>20)c='#00ff00'; if(r>40)c='#ffff00'; if(r>65)c='#ff4444';
+    while(r>=50){p+=`M 22.5 ${y} L 38 ${y+5} L 22.5 ${y+10} `;y+=12;r-=50;}
+    while(r>=10){p+=`M 22.5 ${y} L 38 ${y-5} `;y+=5;r-=10;}
+    if(r>=5)p+=`M 22.5 ${y} L 30 ${y-2.5} `;
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="45" height="45" viewBox="0 0 45 45" style="overflow:visible;"><path d="${p}" stroke="black" stroke-width="4" fill="black" stroke-linecap="round" stroke-linejoin="round"/><path d="${p}" stroke="${c}" stroke-width="2" fill="${c}" stroke-linecap="round" stroke-linejoin="round"/><circle cx="22.5" cy="45" r="3" fill="black"/><circle cx="22.5" cy="45" r="1.5" fill="${c}"/></svg>`;
+}
+function formatCode(dir, k) {
+    let mDir = Math.round(dir - MAG_VAR); if (mDir < 0) mDir += 360; if (mDir >= 360) mDir -= 360;
+    if (k < 5) return "9900"; 
+    let d = Math.round(mDir / 10) * 10; if (d === 0) d = 360; 
+    let dCode = Math.floor(d / 10);
+    if (k >= 100 && k < 200) { dCode += 50; k -= 100; } else if (k >= 200) { dCode += 50; k = 99; }
+    return `${String(dCode).padStart(2, '0')}${String(k).padStart(2, '0')}`;
+}
+
+// --- PRINT VIEW GENERATOR (HF UPDATED) ---
+window.openPrintView = async function() {
+    if(!window.FULL_DATASET.length) return alert("Please fetch data first.");
+    
+    // Fetch HF Frequencies
+    let hfData = {};
+    try {
+        const resp = await fetch(`hf_freqs.json?t=${Date.now()}`);
+        if(resp.ok) hfData = await resp.json();
+    } catch(e) { console.log("No HF Data found"); }
+
+    const now = new Date();
+    const timeStr = `${String(now.getUTCHours()).padStart(2,'0')}${String(now.getUTCMinutes()).padStart(2,'0')}Z`;
+    const dateStr = `${String(now.getUTCMonth()+1).padStart(2,'0')}/${String(now.getUTCDate()).padStart(2,'0')}/${String(now.getUTCFullYear()).slice(-2)}`;
+    const fcstHour = document.getElementById('timeLabel').innerText;
+    
+    const sector1 = ["ZIGIE", "APACK", "BITTA", "CLUTS", "DENNS", "EBBER", "FITES", "SCOON"];
+    const sector2 = ["DOVRR", "CARRP", "CHOKO", "KATHS", "HOOPA", "SYVAD", "CANON", "DANNO", "THOMA"];
+    const printLevels = LEVELS.slice(7); 
+
+    function getHfHtml(keys) {
+        let html = '<div class="hf-box">';
+        let hasData = false;
+        keys.forEach(key => {
+            if(hfData[key] && hfData[key].length > 0) {
+                hasData = true;
+                hfData[key].forEach(line => {
+                    // Check if it's a frequency line (contains colon) or a note
+                    if (line.includes
