@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HCF Oceanic Winds Aloft Forecast</title>
+    <title>HCF Oceanic Winds + PIREPs</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
@@ -11,6 +11,7 @@
         body, html { margin: 0; padding: 0; height: 100%; background: #222; font-family: sans-serif; overflow: hidden; }
         #map { height: 100vh; width: 100vw; background: #222; }
         
+        /* UI Panel */
         .ui-overlay {
             position: absolute; bottom: 20px; left: 20px; z-index: 1000; width: 360px;
             background: rgba(30, 30, 30, 0.95); color: #ccc; padding: 15px; border-radius: 8px;
@@ -22,6 +23,24 @@
             background: #111; border: 1px solid #444; padding: 8px; 
             font-family: 'Consolas', monospace; font-size: 11px; color: #ccc;
             min-height: 60px; max-height: 400px; overflow-y: auto;
+        }
+
+        /* PIREP Marker Styles */
+        .pirep-marker {
+            background-color: #3388ff; /* Default Blue */
+            border: 2px solid white;
+            border-radius: 50%;
+            box-shadow: 0 0 4px black;
+        }
+        .pirep-urgent {
+            background-color: #ff3333 !important; /* Urgent Red */
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(255, 51, 51, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(255, 51, 51, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 51, 51, 0); }
         }
 
         .fix-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; border: 1px solid #333; }
@@ -38,6 +57,7 @@
         button:hover { filter: brightness(1.2); }
         .btn-green { background: #198754; }
         .btn-blue  { background: #0d6efd; }
+        .btn-red   { background: #dc3545; }
 
         .wind-vector-icon { background: transparent; border: none; }
         .fix-label {
@@ -59,7 +79,7 @@
     <div id="map"></div>
 
     <div class="ui-overlay">
-        <h3>HCF Oceanic Winds Aloft Forecast</h3>
+        <h3>HCF Oceanic Winds + PIREPs</h3>
         
         <label>Map Display Altitude</label>
         <select id="altitudeSelect" onchange="window.updateMapLayer()">
@@ -71,8 +91,9 @@
         <div id="reportBox" class="report-box">Initializing...</div>
         
         <div style="display:flex; gap:5px; margin-top:5px;">
-            <button onclick="window.runBulkReport()" class="btn-green">Refresh All Levels</button>
-            <button onclick="window.openPrintView()" class="btn-blue">🖨️ Print View</button>
+            <button onclick="window.runBulkReport()" class="btn-green">Refresh Winds</button>
+            <button onclick="window.togglePIREPs()" class="btn-red" id="btnPirep">✈️ Show PIREPs</button>
+            <button onclick="window.openPrintView()" class="btn-blue">🖨️ Print</button>
         </div>
         
         <div style="font-size:10px; color:#555; margin-top:10px;">
@@ -83,7 +104,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
 
-    <script>
+<script>
         // ================= CONFIGURATION =================
         const MAP_IMAGE = 'map.png';
         const MAP_PGW   = 'map.pgw';
@@ -127,6 +148,10 @@
         // --- MAP SETUP ---
         proj4.defs("EPSG:3857","+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext  +no_defs");
         const map = L.map('map', { center: [21.0, -157.0], zoom: 6, crs: L.CRS.EPSG3857 });
+
+        // Layers
+        let windLayer = L.layerGroup().addTo(map);
+        let pirepLayer = L.layerGroup(); 
 
         (async function initMap() {
             try {
@@ -191,7 +216,7 @@
             return val;
         }
 
-        // --- FETCH LOGIC ---
+        // --- FETCH WIND LOGIC ---
         window.runBulkReport = async function() {
             if(!window.WAYPOINTS.length) return;
             document.getElementById('reportBox').innerHTML = "<div style='color:orange'>Fetching ALL altitude data...</div>";
@@ -231,6 +256,73 @@
             } catch(e) { document.getElementById('reportBox').innerText = "API Error: " + e; }
         };
 
+        // --- FETCH PIREP LOGIC (UPDATED WITH PROXY) ---
+        window.togglePIREPs = async function() {
+            const btn = document.getElementById('btnPirep');
+            
+            if (map.hasLayer(pirepLayer)) {
+                map.removeLayer(pirepLayer);
+                btn.style.filter = "brightness(1)";
+                btn.innerText = "✈️ Show PIREPs";
+            } else {
+                btn.innerText = "⏳ Loading...";
+                try {
+                    // 1. Define Area (Pacific/Hawaii) to keep file size small
+                    // 2. Use 'corsproxy.io' to bypass browser security restrictions
+                    const bbox = "-180,-10,-110,60"; // Huge Pacific Box
+                    const awcUrl = `https://aviationweather.gov/api/data/pirep?format=geojson&bbox=${bbox}`;
+                    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(awcUrl)}`;
+
+                    const resp = await fetch(proxyUrl);
+                    if(!resp.ok) throw new Error("API Failed");
+                    const data = await resp.json();
+                    
+                    pirepLayer.clearLayers();
+
+                    if(data.features.length === 0) {
+                        alert("No PIREPs found in this region right now.");
+                        btn.innerText = "✈️ Show PIREPs";
+                        return;
+                    }
+
+                    L.geoJSON(data, {
+                        pointToLayer: function (feature, latlng) {
+                            const isUrgent = feature.properties.type === 'UUA';
+                            const colorClass = isUrgent ? 'pirep-urgent' : 'pirep-marker';
+                            
+                            return L.marker(latlng, {
+                                icon: L.divIcon({
+                                    className: colorClass,
+                                    iconSize: [12, 12],
+                                    iconAnchor: [6, 6]
+                                })
+                            });
+                        },
+                        onEachFeature: function (feature, layer) {
+                            const p = feature.properties;
+                            const popupContent = `
+                                <div style="font-family:monospace; font-size:12px; color:black;">
+                                    <b>${p.type} PIREP</b><br>
+                                    <hr style="margin:2px 0">
+                                    ${p.rawOb}
+                                </div>
+                            `;
+                            layer.bindPopup(popupContent);
+                        }
+                    }).addTo(pirepLayer);
+                    
+                    map.addLayer(pirepLayer);
+                    btn.style.filter = "brightness(1.3)"; 
+                    btn.innerText = "Hide PIREPs";
+                    
+                } catch(e) {
+                    console.error(e);
+                    alert("Could not fetch PIREPs. If you are opening this file directly (file://), browser security might block it. Try hosting it (e.g. Netlify) or check internet.");
+                    btn.innerText = "✈️ Show PIREPs";
+                }
+            }
+        };
+
         // --- RENDER SIDEBAR REPORT ---
         function renderReport() {
             const reportBox = document.getElementById('reportBox');
@@ -261,7 +353,7 @@
         window.updateMapLayer = function() {
             const altID = document.getElementById('altitudeSelect').value;
             renderReport(); 
-            map.eachLayer(layer => { if (layer instanceof L.Marker) map.removeLayer(layer); });
+            windLayer.clearLayers(); 
 
             window.FULL_DATASET.forEach(d => {
                 if (!d.levels[altID]) return;
@@ -280,9 +372,9 @@
                     </div>`;
 
                 L.marker([d.wp.lat, d.wp.lon], { 
-                    zIndexOffset: 2000,
+                    zIndexOffset: 1000, 
                     icon: L.divIcon({ className: 'wind-vector-icon', html: html, iconSize: [45, 45], iconAnchor: [22.5, 45] })
-                }).addTo(map);
+                }).addTo(windLayer);
             });
         };
 
@@ -338,25 +430,15 @@
 
             let htmlContent = `<html><head><title>HCF Oceanic Winds Aloft Forecast - ${timeStr}</title>
             <style>
-                /* LARGE FONT FOR READABILITY */
                 body { font-family: sans-serif; padding: 20px; font-size: 14px; }
                 h1 { font-size: 18px; border-bottom: 2px solid #444; padding-bottom: 5px; margin-bottom: 15px; }
-                
-                .grid-container { 
-                    display: grid; 
-                    grid-template-columns: repeat(4, 1fr); 
-                    gap: 15px; 
-                }
+                .grid-container { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; }
                 .fix-block { border: 1px solid #000; break-inside: avoid; }
-                
-                /* Large Bold Headers for Fixes */
                 .fix-header { background: #333; color: white; font-weight: bold; text-align: center; padding: 5px; font-size: 16px; }
-                
                 table { width: 100%; border-collapse: collapse; font-size: 14px; }
                 td { border-bottom: 1px solid #ccc; padding: 3px 6px; font-family: monospace; font-weight: bold; }
                 td:last-child { text-align: right; }
                 tr:nth-child(even) { background: #eee; }
-                
                 @media print {
                     .page-break { page-break-after: always; display: block; height: 1px; }
                 }
