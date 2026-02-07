@@ -1,10 +1,9 @@
-name: Update PIREPs
+name: Update Data (PIREP & HF)
 
 on:
   schedule:
-    # Run every 5 minutes
-    - cron: '*/5 * * * *'
-  workflow_dispatch: # Allows manual trigger button
+    - cron: '*/5 * * * *' # Runs every 5 mins (covers the 0400Z/1600Z requirement)
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -23,21 +22,19 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pip install requests
+          pip install requests beautifulsoup4
 
-      - name: Fetch and Process Data
-        run: python fetch_pireps.py
+      - name: Fetch Data
+        run: python fetch_data.py
 
       - name: Commit and Push
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add pireps.json hf_freqs.json
           
-          git add pireps.json
-          
-          # Check if there are changes; if yes, commit, pull, and push
           if ! git diff --quiet && ! git diff --staged --quiet; then
-            git commit -m "Auto-update PIREPs"
+            git commit -m "Auto-update Data"
             git pull --rebase origin main
             git push
           fi
