@@ -69,80 +69,96 @@ def fetch_pireps():
 
 # --- HF FREQUENCY FUNCTIONS ---
 def clean_text(text):
-    return " ".join(text.split())
+    # Removes special characters and excessive spacing
+    return " ".join(text.replace('\xa0', ' ').split())
 
 def fetch_hf():
-    print("Fetching HF Frequencies (Header-Table Match)...")
+    print("Fetching HF Frequencies (State Machine Mode)...")
     try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
         response = requests.get(HF_PAGE_URL, headers=headers, timeout=30)
         response.raise_for_status()
         
         soup = BeautifulSoup(response.content, 'html.parser')
         
-        # Data Structure
         data = {
             "hwn_cal_major": [], "hwn_cal_other": [], "hwn_pacnw": [],
             "hwn_south": [], "hwn_alaska": [], "hwn_west": [], "notes": []
         }
 
-        # Strategy: Find all Headers (h2, h3, h4, or strong/b tags)
-        # Then check the *next* table that appears after them.
-        elements = soup.find_all(['h2', 'h3', 'h4', 'h5', 'strong', 'b', 'p'])
+        # STATE MACHINE VARS
+        current_cat = None
         
-        current_category = None
+        # Get EVERY row on the page, regardless of table nesting
+        all_rows = soup.find_all('tr')
         
-        for el in elements:
-            text = clean_text(el.get_text()).upper()
+        for row in all_rows:
+            # Get text from the whole row to check for Headers
+            row_text = clean_text(row.get_text()).upper()
             
-            # Identify Category based on Header Text
-            if "CALIFORNIA" in text: current_category = "CAL"
-            elif "PACIFIC NW" in text or "PAC NW" in text: current_category = "PACNW"
-            elif "SOUTHBOUND" in text: current_category = "SOUTH"
-            elif "ALASKA" in text: current_category = "ALASKA"
-            elif "WESTBOUND" in text: current_category = "WEST"
-            elif "NOTE" in text: current_category = "NOTE"
-            else: continue # Not a header we care about
-            
-            # Find the next table
-            next_table = el.find_next('table')
-            if not next_table: continue
-            
-            # Parse the table rows
-            rows = next_table.find_all('tr')
-            for row in rows:
-                cols = [clean_text(c.get_text()) for c in row.find_all(['td', 'th'])]
-                if not cols: continue
-                
-                full_line = " | ".join(cols)
-                
-                # Assign to correct JSON key
-                if current_category == "CAL":
-                    if any(x in full_line.upper() for x in ["AAL", "DAL", "ACA", "WJA", "MILITARY"]):
-                        data["hwn_cal_major"].append(full_line)
-                    else:
-                        data["hwn_cal_other"].append(full_line)
-                elif current_category == "PACNW":
-                    data["hwn_pacnw"].append(full_line)
-                elif current_category == "SOUTH":
-                    data["hwn_south"].append(full_line)
-                elif current_category == "ALASKA":
-                    data["hwn_alaska"].append(full_line)
-                elif current_category == "WEST":
-                    data["hwn_west"].append(full_line)
-                elif current_category == "NOTE":
-                    data["notes"].append(full_line)
+            # 1. DETECT HEADER / CATEGORY CHANGE
+            if "HAWAII" in row_text and "CALIFORNIA" in row_text:
+                current_cat = "CAL"
+                continue # Skip the header row itself
+            elif "PACIFIC NW" in row_text or "PAC NW" in row_text:
+                current_cat = "PACNW"
+                continue
+            elif "SOUTHBOUND" in row_text:
+                current_cat = "SOUTH"
+                continue
+            elif "ALASKA" in row_text:
+                current_cat = "ALASKA"
+                continue
+            elif "WESTBOUND" in row_text:
+                current_cat = "WEST"
+                continue
+            elif "NOTE" in row_text:
+                # Capture the note immediately
+                data["notes"].append(row_text)
+                continue
 
-        # Remove Duplicates (sometimes headers repeat)
+            # 2. CAPTURE DATA (If we are in a valid category)
+            if current_cat:
+                cols = row.find_all(['td', 'th'])
+                # Only care if we have distinct columns (Route | Pri | Sec | Fam)
+                if len(cols) >= 2:
+                    col_texts = [clean_text(c.get_text()) for c in cols]
+                    
+                    # Ignore header rows that got caught (e.g. "Route Primary Secondary")
+                    if "PRIMARY" in col_texts[1].upper(): continue
+                    
+                    full_line = " | ".join(col_texts)
+                    
+                    # Sort into specific lists
+                    if current_cat == "CAL":
+                        if any(x in full_line.upper() for x in ["AAL", "DAL", "ACA", "WJA", "MILITARY"]):
+                            data["hwn_cal_major"].append(full_line)
+                        else:
+                            data["hwn_cal_other"].append(full_line)
+                    elif current_cat == "PACNW":
+                        data["hwn_pacnw"].append(full_line)
+                    elif current_cat == "SOUTH":
+                        data["hwn_south"].append(full_line)
+                    elif current_cat == "ALASKA":
+                        data["hwn_alaska"].append(full_line)
+                    elif current_cat == "WEST":
+                        data["hwn_west"].append(full_line)
+
+        # Clean duplicates
         for k in data:
             data[k] = list(set(data[k]))
+            # Sort for cleanliness
+            data[k].sort()
 
         with open("hf_freqs.json", "w") as f:
             json.dump(data, f)
             
         print(f"✅ Saved HF Frequencies.")
-        # Debug print
-        print(f"DEBUG Sample: {str(data)[:200]}...")
+        # Debugging: Print counts to log
+        for k, v in data.items():
+            print(f"   - {k}: {len(v)} items")
 
     except Exception as e:
         print(f"❌ HF Error: {e}")
