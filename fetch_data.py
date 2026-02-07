@@ -95,72 +95,54 @@ def fetch_hf():
             "hwn_south": [], "hwn_alaska": [], "hwn_west": [], "notes": []
         }
 
-        # Scan every table row on the page
         all_rows = soup.find_all('tr')
         
         for row in all_rows:
-            # Extract all cells in this row
             cols = row.find_all(['td', 'th'])
             row_text_list = [clean_text(c.get_text()) for c in cols]
             
-            # Skip empty rows
             if not row_text_list: continue
             
-            # Join text to make matching easier (e.g., "Hawaii -> California tracks (Others)")
+            # Use specific columns for stricter checking
+            route_name = row_text_list[0].upper() # e.g. "HAWAII -> CALIFORNIA"
+            
+            # 1. NOTES Logic (Usually a header row or spanning cell)
             full_line_text = " ".join(row_text_list).upper()
-            
-            # Identify "Notes" section (usually distinct row)
-            if "NOTES" in full_line_text and len(row_text_list) == 1:
-                # Often the note title is in one row, and content in the next, 
-                # OR it's "Notes: SWA and Civil..."
-                # Based on screenshot, "Notes" is a header, text follows.
-                # We'll grab any row that looks like a note description.
-                continue 
-            
-            # If it's the actual note text (usually long, contains 'SWA')
             if "SWA" in full_line_text and "CIVIL" in full_line_text:
                 data["notes"].append(clean_text(row.get_text()))
                 continue
 
-            # Skip header rows (e.g., rows containing just "Primary" or "Secondary")
-            if "PRIMARY" in full_line_text: continue
+            # 2. Skip non-data rows
+            if "PRIMARY" in full_line_text or len(row_text_list) < 2: continue
             
-            # --- PARSE FREQUENCIES ---
-            # We expect: [Route Name, Primary Freq, Secondary Freq]
-            if len(row_text_list) >= 2:
-                route_name = row_text_list[0]
-                freqs = " | ".join(row_text_list[1:]) # Combine frequencies
-                
-                display_str = f"{route_name}: {freqs}"
-                
-                # --- MATCHING LOGIC (Based on Screenshot) ---
-                u_text = route_name.upper()
-                
-                # 1. Hawaii -> California (Major Airlines)
-                if "HAWAII" in u_text and "CALIFORNIA" in u_text and ("AAL" in u_text or "MILITARY" in u_text):
-                    data["hwn_cal_major"].append(display_str)
-                
-                # 2. Hawaii -> California (Others)
-                elif "HAWAII" in u_text and "CALIFORNIA" in u_text and "OTHERS" in u_text:
-                    data["hwn_cal_other"].append(display_str)
-                    
-                # 3. Hawaii -> Pacific NW
-                elif "HAWAII" in u_text and ("PACIFIC NW" in u_text or "PAC NW" in u_text):
-                    data["hwn_pacnw"].append(display_str)
-                    
-                # 4. Hawaii -> Southbound
-                elif "HAWAII" in u_text and "SOUTHBOUND" in u_text:
-                    data["hwn_south"].append(display_str)
-                    
-                # 5. Hawaii -> Westbound
-                elif "HAWAII" in u_text and "WESTBOUND" in u_text:
-                    data["hwn_west"].append(display_str)
-                    
-                # 6. Hawaii -> Alaska
-                elif "HAWAII" in u_text and "ALASKA" in u_text:
-                    data["hwn_alaska"].append(display_str)
+            # --- STRICT FILTER: MUST START WITH HAWAII ---
+            # This filters out "California -> Hawaii"
+            if not route_name.startswith("HAWAII"):
+                continue
 
-        # Remove duplicates and sort
+            freqs = " | ".join(row_text_list[1:])
+            display_str = f"{row_text_list[0]}: {freqs}"
+            
+            # 3. Categorize Hawaii Departures
+            if "CALIFORNIA" in route_name:
+                if any(x in route_name for x in ["AAL", "DAL", "ACA", "WJA", "MILITARY"]):
+                    data["hwn_cal_major"].append(display_str)
+                else:
+                    data["hwn_cal_other"].append(display_str)
+            
+            elif "PACIFIC NW" in route_name or "PAC NW" in route_name:
+                data["hwn_pacnw"].append(display_str)
+            
+            elif "SOUTHBOUND" in route_name:
+                data["hwn_south"].append(display_str)
+                
+            elif "WESTBOUND" in route_name:
+                data["hwn_west"].append(display_str)
+                
+            elif "ALASKA" in route_name:
+                data["hwn_alaska"].append(display_str)
+
+        # De-duplicate
         for k in data:
             data[k] = sorted(list(set(data[k])))
 
