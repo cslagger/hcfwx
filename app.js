@@ -6,21 +6,11 @@ const CSV_FILE  = 'Designated_Point.csv';
 const TARGET_FIXES = ["ZIGIE", "APACK", "BITTA", "CLUTS", "DENNS", "EBBER", "FITES", "SCOON", "DOVRR", "CARRP", "CHOKO", "KATHS", "HOOPA", "SYVAD", "CANON", "DANNO", "THOMA"];
 
 const LEVELS = [
-    { id: '10m', label: 'Surface' },
-    { id: '1000hPa', label: '300 ft' },
-    { id: '950hPa', label: '2,000 ft' },
-    { id: '925hPa', label: '2,500 ft' },
-    { id: '900hPa', label: '3,000 ft' },
-    { id: '850hPa', label: '5,000 ft' },
-    { id: '800hPa', label: '6,000 ft' },
-    { id: '700hPa', label: '10,000 ft' },
-    { id: '600hPa', label: '14,000 ft' },
-    { id: '500hPa', label: 'FL 180' },
-    { id: '400hPa', label: 'FL 240' },
-    { id: '300hPa', label: 'FL 300' },
-    { id: '250hPa', label: 'FL 340' },
-    { id: '200hPa', label: 'FL 390' },
-    { id: '150hPa', label: 'FL 450' },
+    { id: '10m', label: 'Surface' }, { id: '1000hPa', label: '300 ft' }, { id: '950hPa', label: '2,000 ft' },
+    { id: '925hPa', label: '2,500 ft' }, { id: '900hPa', label: '3,000 ft' }, { id: '850hPa', label: '5,000 ft' },
+    { id: '800hPa', label: '6,000 ft' }, { id: '700hPa', label: '10,000 ft' }, { id: '600hPa', label: '14,000 ft' },
+    { id: '500hPa', label: 'FL 180' }, { id: '400hPa', label: 'FL 240' }, { id: '300hPa', label: 'FL 300' },
+    { id: '250hPa', label: 'FL 340' }, { id: '200hPa', label: 'FL 390' }, { id: '150hPa', label: 'FL 450' },
     { id: '100hPa', label: 'FL 530' }
 ];
 
@@ -32,6 +22,7 @@ LEVELS.forEach(l => {
     sel.appendChild(opt);
 });
 
+// ================= GLOBALS =================
 window.WAYPOINTS = [];
 window.FULL_DATASET = [];
 window.CURRENT_HOUR = 0;
@@ -42,10 +33,10 @@ if(typeof proj4 !== 'undefined') {
 }
 
 const map = L.map('map', { center: [21.0, -157.0], zoom: 6, crs: L.CRS.EPSG3857 });
-
 let windLayer = L.layerGroup().addTo(map);
 let pirepLayer = L.layerGroup(); 
 
+// --- INITIALIZATION ---
 (async function initMap() {
     try {
         const resp = await fetch(MAP_PGW);
@@ -135,10 +126,7 @@ window.runBulkReport = async function() {
             LEVELS.forEach(l => {
                 const sKey = (l.id === '10m') ? 'windspeed_10m' : `windspeed_${l.id}`;
                 const dKey = (l.id === '10m') ? 'winddirection_10m' : `winddirection_${l.id}`;
-                wpData.levels[l.id] = {
-                    speeds: item.hourly[sKey],
-                    dirs: item.hourly[dKey]
-                };
+                wpData.levels[l.id] = { speeds: item.hourly[sKey], dirs: item.hourly[dKey] };
             });
             wpData.times = item.hourly.time;
             return wpData;
@@ -148,6 +136,7 @@ window.runBulkReport = async function() {
     } catch(e) { document.getElementById('reportBox').innerText = "API Error: " + e; }
 };
 
+// --- PIREP HELPERS ---
 function getPirepConditions(raw) {
     if (!raw) return "Flight Info";
     const r = raw.toUpperCase();
@@ -165,21 +154,16 @@ function getPirepConditions(raw) {
 function getPirepTimeData(raw) {
     const match = raw && raw.match(/(?:^|[\s/])TM\s+(\d{4})/);
     if (!match) return { displayTime: "N/A", age: null };
-    
     const timeStr = match[1];
     const hours = parseInt(timeStr.slice(0, 2), 10);
     const mins = parseInt(timeStr.slice(2), 10);
-    
     const now = new Date();
     const pirepDate = new Date();
     pirepDate.setUTCHours(hours, mins, 0, 0);
-    
     if (pirepDate > now && (pirepDate - now) < 43200000) { } 
     else if (pirepDate > now) { pirepDate.setUTCDate(pirepDate.getUTCDate() - 1); }
-    
     const diffMs = now - pirepDate;
     const ageMin = Math.floor(diffMs / 60000);
-    
     return { displayTime: `${timeStr}Z`, age: ageMin >= 0 ? ageMin : 0 };
 }
 
@@ -199,6 +183,11 @@ window.togglePIREPs = async function() {
             if (!resp.ok) throw new Error("Missing pireps.json");
             const data = await resp.json();
             
+            // UPDATE STATUS
+            if (data.generated_at) {
+                document.getElementById('pirepStatus').innerText = `PIREP Last Updated: ${data.generated_at}`;
+            }
+
             if (!data.features || data.features.length === 0) {
                 alert("No PIREPs found.");
                 btn.innerText = "✈️ Show PIREPs";
@@ -206,11 +195,7 @@ window.togglePIREPs = async function() {
             }
             
             pirepLayer.clearLayers();
-
-            L.circle([21.318, -157.922], {
-                color: 'rgba(255, 255, 255, 0.3)',
-                fillColor: 'transparent', weight: 1, dashArray: '5, 5', radius: 463000 
-            }).addTo(pirepLayer);
+            L.circle([21.318, -157.922], { color: 'rgba(255, 255, 255, 0.3)', fillColor: 'transparent', weight: 1, dashArray: '5, 5', radius: 463000 }).addTo(pirepLayer);
 
             L.geoJSON(data, {
                 pointToLayer: function (feature, latlng) {
@@ -219,41 +204,24 @@ window.togglePIREPs = async function() {
                     const raw = (p.rawOb || "").toUpperCase();
                     const needsSolicit = /(TB|TURB).*(MDT|SEV|EXTRM)|(IC|ICG).*(LGT|MOD|SEV)|TS|LLWS|VA/.test(raw) || isUrgent;
                     const symbol = needsSolicit ? '!' : '';
-
                     const timeData = getPirepTimeData(p.rawOb);
                     const age = timeData.age !== null ? timeData.age : p.age; 
                     
                     let colorClass = 'pirep-green'; 
-                    
-                    if (isUrgent) { 
-                        colorClass = 'pirep-urgent'; 
-                    } else if (age > 90) {
-                        colorClass = 'pirep-grey';   // NEW: Grey for > 90m
-                    } else if (age > 60) {
-                        colorClass = 'pirep-orange'; // Orange for 60-90m
-                    }
-                    // Default is green (<60m)
+                    if (isUrgent) { colorClass = 'pirep-urgent'; } 
+                    else if (age > 90) { colorClass = 'pirep-grey'; }
+                    else if (age > 60) { colorClass = 'pirep-orange'; }
 
-                    return L.marker(latlng, {
-                        icon: L.divIcon({
-                            className: `pirep-base ${colorClass}`,
-                            html: symbol, iconSize: [14, 14], iconAnchor: [7, 7]
-                        })
-                    });
+                    return L.marker(latlng, { icon: L.divIcon({ className: `pirep-base ${colorClass}`, html: symbol, iconSize: [14, 14], iconAnchor: [7, 7] }) });
                 },
                 onEachFeature: function (feature, layer) {
                     const p = feature.properties;
                     const conditionText = getPirepConditions(p.rawOb);
                     const timeData = getPirepTimeData(p.rawOb);
                     const age = timeData.age !== null ? timeData.age : p.age;
-                    
                     let ageClass = 'pirep-popup-age-fresh';
-                    if (age > 90) {
-                        ageClass = 'pirep-popup-age-expired'; // NEW: Red Text
-                    } else if (age > 60) {
-                        ageClass = 'pirep-popup-age-old';
-                    }
-                    
+                    if (age > 90) ageClass = 'pirep-popup-age-expired';
+                    else if (age > 60) ageClass = 'pirep-popup-age-old';
                     const headerClass = p.type === 'UUA' ? 'header-urgent' : 'header-routine';
 
                     const popupContent = `
@@ -267,8 +235,7 @@ window.togglePIREPs = async function() {
                             </div>
                             <hr style="margin:4px 0; border:0; border-top:1px solid #ccc;">
                             ${p.rawOb || "No raw text"}
-                        </div>
-                    `;
+                        </div>`;
                     layer.bindPopup(popupContent);
                 }
             }).addTo(pirepLayer);
@@ -277,11 +244,7 @@ window.togglePIREPs = async function() {
             btn.style.filter = "brightness(1.3)"; 
             btn.innerText = "Hide PIREPs";
             
-        } catch(e) {
-            console.error(e);
-            alert("Could not load PIREPs. Wait for GitHub Action.");
-            btn.innerText = "✈️ Show PIREPs";
-        }
+        } catch(e) { console.error(e); alert("Could not load PIREPs."); btn.innerText = "✈️ Show PIREPs"; }
     }
 };
 
@@ -294,8 +257,7 @@ function renderReport() {
     const currentMapAlt = document.getElementById('altitudeSelect').value;
 
     window.FULL_DATASET.forEach(data => {
-        let html = `<table class="fix-table">
-            <thead><tr><th colspan="2">${data.wp.name}</th></tr></thead><tbody>`;
+        let html = `<table class="fix-table"><thead><tr><th colspan="2">${data.wp.name}</th></tr></thead><tbody>`;
         LEVELS.forEach(l => {
             const idx = Math.min(window.CURRENT_HOUR, data.levels[l.id].speeds.length-1);
             const k = Math.round(data.levels[l.id].speeds[idx] * 0.539957);
@@ -327,7 +289,6 @@ window.updateMapLayer = function() {
 
 window.updateTime = (v) => { window.CURRENT_HOUR = parseInt(v); document.getElementById('timeLabel').innerText = v; window.updateMapLayer(); };
 function formatAv(d,k) { let m = Math.round(d-MAG_VAR); if(m<0)m+=360; if(m>=360)m-=360; return `${String(m).padStart(3,'0')}°${String(k).padStart(3,'0')}KT`; }
-
 function getBarbSVG(k,c) {
     let r=Math.round(k/5)*5, p="M 22.5 45 L 22.5 5 ", y=5;
     if(r>20)c='#00ff00'; if(r>40)c='#ffff00'; if(r>65)c='#ff4444';
@@ -336,7 +297,6 @@ function getBarbSVG(k,c) {
     if(r>=5)p+=`M 22.5 ${y} L 30 ${y-2.5} `;
     return `<svg xmlns="http://www.w3.org/2000/svg" width="45" height="45" viewBox="0 0 45 45" style="overflow:visible;"><path d="${p}" stroke="black" stroke-width="4" fill="black" stroke-linecap="round" stroke-linejoin="round"/><path d="${p}" stroke="${c}" stroke-width="2" fill="${c}" stroke-linecap="round" stroke-linejoin="round"/><circle cx="22.5" cy="45" r="3" fill="black"/><circle cx="22.5" cy="45" r="1.5" fill="${c}"/></svg>`;
 }
-
 function formatCode(dir, k) {
     let mDir = Math.round(dir - MAG_VAR); if (mDir < 0) mDir += 360; if (mDir >= 360) mDir -= 360;
     if (k < 5) return "9900"; 
@@ -346,18 +306,49 @@ function formatCode(dir, k) {
     return `${String(dCode).padStart(2, '0')}${String(k).padStart(2, '0')}`;
 }
 
-window.openPrintView = function() {
+// --- PRINT VIEW GENERATOR (HF UPDATED) ---
+window.openPrintView = async function() {
     if(!window.FULL_DATASET.length) return alert("Please fetch data first.");
+    
+    // Fetch HF Frequencies
+    let hfData = {};
+    try {
+        const resp = await fetch(`hf_freqs.json?t=${Date.now()}`);
+        if(resp.ok) hfData = await resp.json();
+    } catch(e) { console.log("No HF Data found"); }
+
     const now = new Date();
     const timeStr = `${String(now.getUTCHours()).padStart(2,'0')}${String(now.getUTCMinutes()).padStart(2,'0')}Z`;
     const dateStr = `${String(now.getUTCMonth()+1).padStart(2,'0')}/${String(now.getUTCDate()).padStart(2,'0')}/${String(now.getUTCFullYear()).slice(-2)}`;
     const fcstHour = document.getElementById('timeLabel').innerText;
+    
     const sector1 = ["ZIGIE", "APACK", "BITTA", "CLUTS", "DENNS", "EBBER", "FITES", "SCOON"];
     const sector2 = ["DOVRR", "CARRP", "CHOKO", "KATHS", "HOOPA", "SYVAD", "CANON", "DANNO", "THOMA"];
     const printLevels = LEVELS.slice(7); 
 
-    function renderGroup(title, fixList) {
-        let html = `<div class="page-section"><h1>${title} &nbsp; | &nbsp; Forecast: +${fcstHour}h &nbsp; | &nbsp; Retrieved: ${timeStr} ${dateStr}</h1><div class="grid-container">`;
+    // Helper to generate HF HTML list
+    function getHfHtml(keys) {
+        let html = '<div class="hf-box">';
+        keys.forEach(key => {
+            if(hfData[key] && hfData[key].length > 0) {
+                hfData[key].forEach(line => {
+                    html += `<div>${line}</div>`;
+                });
+            }
+        });
+        html += '</div>';
+        return html;
+    }
+
+    function renderGroup(title, fixList, hfKeys) {
+        let html = `<div class="page-section"><h1>${title} &nbsp; | &nbsp; Forecast: +${fcstHour}h &nbsp; | &nbsp; Retrieved: ${timeStr} ${dateStr}</h1>`;
+        
+        // Add HF Data if present
+        if (hfKeys.length > 0) {
+            html += `<div style="margin-bottom:10px; border:1px solid #000; padding:5px; font-size:12px;"><strong>HF FREQUENCIES:</strong>${getHfHtml(hfKeys)}</div>`;
+        }
+
+        html += `<div class="grid-container">`;
         const sectorData = fixList.map(name => window.FULL_DATASET.find(d => d.wp.name === name)).filter(x => x);
         sectorData.forEach(data => {
             html += `<div class="fix-block"><div class="fix-header">${data.wp.name}</div><table>`;
@@ -373,10 +364,28 @@ window.openPrintView = function() {
         return html;
     }
 
-    let htmlContent = `<html><head><title>HCF Oceanic Winds Aloft Forecast - ${timeStr}</title><style>body { font-family: sans-serif; padding: 20px; font-size: 14px; } h1 { font-size: 18px; border-bottom: 2px solid #444; padding-bottom: 5px; margin-bottom: 15px; } .grid-container { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; } .fix-block { border: 1px solid #000; break-inside: avoid; } .fix-header { background: #333; color: white; font-weight: bold; text-align: center; padding: 5px; font-size: 16px; } table { width: 100%; border-collapse: collapse; font-size: 14px; } td { border-bottom: 1px solid #ccc; padding: 3px 6px; font-family: monospace; font-weight: bold; } td:last-child { text-align: right; } tr:nth-child(even) { background: #eee; } @media print { .page-break { page-break-after: always; display: block; height: 1px; } }</style></head><body>`;
-    htmlContent += renderGroup("HCF Oceanic Winds Aloft Forecast - Sector 7/8", sector1);
+    let htmlContent = `<html><head><title>HCF Oceanic Winds Aloft Forecast - ${timeStr}</title><style>
+        body { font-family: sans-serif; padding: 20px; font-size: 14px; }
+        h1 { font-size: 18px; border-bottom: 2px solid #444; padding-bottom: 5px; margin-bottom: 15px; }
+        .grid-container { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; }
+        .fix-block { border: 1px solid #000; break-inside: avoid; }
+        .fix-header { background: #333; color: white; font-weight: bold; text-align: center; padding: 5px; font-size: 16px; }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        td { border-bottom: 1px solid #ccc; padding: 3px 6px; font-family: monospace; font-weight: bold; }
+        td:last-child { text-align: right; }
+        tr:nth-child(even) { background: #eee; }
+        .hf-box { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-family: monospace; }
+        @media print { .page-break { page-break-after: always; display: block; height: 1px; } }
+    </style></head><body>`;
+
+    // Page 1: Sector 7/8
+    htmlContent += renderGroup("HCF Oceanic Winds Aloft Forecast - Sector 7/8", sector1, ["hwn_cal_major", "hwn_cal_other", "hwn_pacnw", "hwn_south", "hwn_alaska", "notes"]);
+    
     htmlContent += `<div class="page-break"></div>`;
-    htmlContent += renderGroup("HCF Oceanic Winds Aloft Forecast - Sector 2/6", sector2);
+    
+    // Page 2: Sector 2/6
+    htmlContent += renderGroup("HCF Oceanic Winds Aloft Forecast - Sector 2/6", sector2, ["hwn_west", "hwn_south", "notes"]);
+    
     htmlContent += `<script>window.print();<\/script></body></html>`;
     const win = window.open("", "_blank");
     win.document.write(htmlContent);
