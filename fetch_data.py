@@ -4,7 +4,9 @@ import xml.etree.ElementTree as ET
 import json
 import math
 import io
+import re
 from datetime import datetime, timezone
+from bs4 import BeautifulSoup
 
 # --- PIREP CONFIGURATION ---
 PIREP_SOURCE = "https://aviationweather.gov/data/cache/aircraftreports.cache.xml.gz"
@@ -12,9 +14,8 @@ PHNL_LAT, PHNL_LON = 21.318, -157.922
 MAX_DIST_NM = 250
 MAX_AGE_MIN = 90
 
-# --- HF CONFIGURATION (NEW API ENDPOINT) ---
-# ARINC uses this hidden API to populate the table
-HF_API_SOURCE = "https://radio.arinc.net/xml/pacific.json"
+# --- HF CONFIGURATION ---
+HF_PAGE_URL = "https://radio.arinc.net/pacific/"
 
 def haversine_distance(lat1, lon1, lat2, lon2):
     R = 3440.065
@@ -79,65 +80,68 @@ def fetch_pireps():
     except Exception as e:
         print(f"❌ PIREP Error: {e}")
 
+def clean_text(text):
+    """Remove extra whitespace and newlines."""
+    return " ".join(text.split())
+
 def fetch_hf():
-    print("Fetching HF Frequencies (Direct API)...")
+    print("Fetching HF Frequencies (HTML Scraping)...")
     try:
-        # 1. Fetch JSON from ARINC Backend
+        # 1. Fetch HTML with User-Agent to avoid blocking
         headers = {
-            'User-Agent': 'Mozilla/5.0',
-            'Referer': 'https://radio.arinc.net/pacific/'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
-        response = requests.get(HF_API_SOURCE, headers=headers, timeout=30)
+        response = requests.get(HF_PAGE_URL, headers=headers, timeout=30)
         response.raise_for_status()
-        raw_data = response.json()
         
-        # 2. Structure Data for our App
-        # The JSON usually returns a list of objects like: {"route": "HAWAII-CALIFORNIA...", "primary": "...", "secondary": "..."}
+        soup = BeautifulSoup(response.content, 'html.parser')
         
         data = {
             "hwn_cal_major": [], "hwn_cal_other": [], "hwn_pacnw": [],
             "hwn_south": [], "hwn_alaska": [], "hwn_west": [], "notes": []
         }
+
+        # 2. Iterate over ALL tables to find data
+        tables = soup.find_all('table')
         
-        # Helper to format frequency strings
-        def fmt_freq(row):
-            freqs = []
-            if row.get('primary'): freqs.append(row['primary'])
-            if row.get('secondary'): freqs.append(row['secondary'])
-            if row.get('family'): freqs.append(f"({row['family']})")
-            return " | ".join(freqs)
-
-        for row in raw_data:
-            route = row.get('route', '').upper()
-            freq_str = fmt_freq(row)
-            line = f"{route}: {freq_str}"
-
-            # Filtering Logic
-            if "CALIFORNIA" in route:
-                if "AAL" in route or "DAL" in route or "ACA" in route or "WJA" in route or "MILITARY" in route:
-                    data["hwn_cal_major"].append(line)
-                else:
-                    data["hwn_cal_other"].append(line)
-            
-            elif "PAC NW" in route or "PACIFIC NW" in route:
-                data["hwn_pacnw"].append(line)
-            
-            elif "SOUTHBOUND" in route:
-                data["hwn_south"].append(line)
-            
-            elif "ALASKA" in route:
-                data["hwn_alaska"].append(line)
+        for table in tables:
+            rows = table.find_all('tr')
+            for row in rows:
+                cols = row.find_all(['td', 'th'])
+                if not cols: continue
                 
-            elif "WESTBOUND" in route:
-                data["hwn_west"].append(line)
+                # Extract text from columns
+                row_text = [clean_text(c.get_text()) for c in cols]
+                full_line = " | ".join(row_text)
+                header = row_text[0].upper()
                 
-            # Notes are sometimes separate text fields or just generic rows
-            elif "NOTE" in route:
-                data["notes"].append(line)
+                # Logic to categorize rows
+                if "CALIFORNIA" in header:
+                    if any(x in header for x in ["AAL", "DAL", "ACA", "WJA", "MILITARY"]):
+                        data["hwn_cal_major"].append(full_line)
+                    else:
+                        data["hwn_cal_other"].append(full_line)
+                
+                elif "PAC NW" in header or "PACIFIC NW" in header:
+                    data["hwn_pacnw"].append(full_line)
+                
+                elif "SOUTHBOUND" in header:
+                    data["hwn_south"].append(full_line)
+                
+                elif "ALASKA" in header:
+                    data["hwn_alaska"].append(full_line)
+                
+                elif "WESTBOUND" in header:
+                    data["hwn_west"].append(full_line)
+                
+                elif "NOTE" in header:
+                    data["notes"].append(full_line)
 
+        # 3. Save to JSON
         with open("hf_freqs.json", "w") as f:
             json.dump(data, f)
-        print(f"✅ Saved HF Frequencies from API.")
+            
+        print(f"✅ Saved HF Frequencies.")
 
     except Exception as e:
         print(f"❌ HF Error: {e}")
