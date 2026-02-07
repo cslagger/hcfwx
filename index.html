@@ -256,7 +256,7 @@
             } catch(e) { document.getElementById('reportBox').innerText = "API Error: " + e; }
         };
 
-        // --- FETCH PIREP LOGIC (UPDATED WITH PROXY) ---
+     // --- FETCH PIREP LOGIC (DIRECT & REAL-TIME) ---
         window.togglePIREPs = async function() {
             const btn = document.getElementById('btnPirep');
             
@@ -266,27 +266,50 @@
                 btn.innerText = "✈️ Show PIREPs";
             } else {
                 btn.innerText = "⏳ Loading...";
-                try {
-                    // 1. Define Area (Pacific/Hawaii) to keep file size small
-                    // 2. Use 'corsproxy.io' to bypass browser security restrictions
-                    const bbox = "-180,-10,-110,60"; // Huge Pacific Box
-                    const awcUrl = `https://aviationweather.gov/api/data/pirep?format=geojson&bbox=${bbox}`;
-                    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(awcUrl)}`;
+                
+                // PHNL Coordinates
+                const lat = 21.318;
+                const lon = -157.922;
+                
+                // 250 NM = 288 Statute Miles (API uses Statute Miles)
+                const distMiles = 288; 
+                
+                // 90 Minutes = 5400 Seconds
+                const ageSeconds = 5400;
 
-                    const resp = await fetch(proxyUrl);
-                    if(!resp.ok) throw new Error("API Failed");
+                // 1. Direct AWC URL
+                // 2. Added "&_=${Date.now()}" to FORCE fresh data (bypasses cache)
+                const targetUrl = `https://aviationweather.gov/api/data/pirep?format=geojson&lat=${lat}&lon=${lon}&dist=${distMiles}&age=${ageSeconds}&_=${Date.now()}`;
+                
+                try {
+                    const resp = await fetch(targetUrl);
+                    
+                    if (!resp.ok) {
+                        throw new Error(`AWC Error: ${resp.status}`);
+                    }
+                    
                     const data = await resp.json();
                     
-                    pirepLayer.clearLayers();
-
-                    if(data.features.length === 0) {
-                        alert("No PIREPs found in this region right now.");
+                    if (!data.features || data.features.length === 0) {
+                        alert("AWC reports 0 PIREPs within 250NM of PHNL in the last 90 mins.");
                         btn.innerText = "✈️ Show PIREPs";
                         return;
                     }
+                    
+                    pirepLayer.clearLayers();
+
+                    // Range Ring (250 NM)
+                    L.circle([lat, lon], {
+                        color: 'rgba(255, 255, 255, 0.3)',
+                        fillColor: 'transparent',
+                        weight: 1,
+                        dashArray: '5, 5',
+                        radius: 463000 
+                    }).addTo(pirepLayer);
 
                     L.geoJSON(data, {
                         pointToLayer: function (feature, latlng) {
+                            // Check for Urgent (UUA)
                             const isUrgent = feature.properties.type === 'UUA';
                             const colorClass = isUrgent ? 'pirep-urgent' : 'pirep-marker';
                             
@@ -301,10 +324,11 @@
                         onEachFeature: function (feature, layer) {
                             const p = feature.properties;
                             const popupContent = `
-                                <div style="font-family:monospace; font-size:12px; color:black;">
-                                    <b>${p.type} PIREP</b><br>
-                                    <hr style="margin:2px 0">
-                                    ${p.rawOb}
+                                <div style="font-family:monospace; font-size:12px; color:black; min-width: 200px;">
+                                    <strong style="color:${p.type === 'UUA' ? 'red' : 'blue'}">${p.type} PIREP</strong><br>
+                                    <span style="color:#555;">Alt: ${p.alt ? p.alt + 'ft' : 'Unknown'}</span><br>
+                                    <hr style="margin:4px 0; border:0; border-top:1px solid #ccc;">
+                                    ${p.rawOb || "No raw text"}
                                 </div>
                             `;
                             layer.bindPopup(popupContent);
@@ -316,8 +340,9 @@
                     btn.innerText = "Hide PIREPs";
                     
                 } catch(e) {
-                    console.error(e);
-                    alert("Could not fetch PIREPs. If you are opening this file directly (file://), browser security might block it. Try hosting it (e.g. Netlify) or check internet.");
+                    console.error("PIREP Fetch Error:", e);
+                    // Fallback suggestion if Direct access is blocked by strict browser settings
+                    alert(`Error fetching PIREPs.\n\nBrowser reported: ${e.message}\n\nNote: Ensure you are running this over HTTPS (GitHub Pages/Netlify) and not as a local file.`);
                     btn.innerText = "✈️ Show PIREPs";
                 }
             }
