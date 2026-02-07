@@ -4,9 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HCF Oceanic Winds Aloft Forecast</title>
-    
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #222; font-family: sans-serif; overflow: hidden; }
         #map { height: 100vh; width: 100vw; background: #222; }
@@ -30,12 +28,9 @@
             color: white; text-align: center; font-weight: 900; font-size: 10px;
             line-height: 14px; font-family: sans-serif;
         }
-        
-        /* Icon Colors */
-        .pirep-green { background-color: #28a745; }   /* < 60 mins */
-        .pirep-orange { background-color: #fd7e14; }  /* 60-90 mins */
-        .pirep-grey { background-color: #6c757d; }    /* > 90 mins (New) */
-        
+        .pirep-green { background-color: #28a745; }
+        .pirep-orange { background-color: #fd7e14; }
+        .pirep-grey { background-color: #6c757d; }
         .pirep-urgent { background-color: #dc3545; animation: pulse 1.5s infinite; }
 
         @keyframes pulse {
@@ -44,11 +39,9 @@
             100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
         }
 
-        /* Popup Text Colors */
         .pirep-popup-age-fresh { color: #28a745; font-weight: bold; }
         .pirep-popup-age-old { color: #fd7e14; font-weight: bold; }
-        .pirep-popup-age-expired { color: #dc3545; font-weight: bold; } /* Red Text for >90m */
-        
+        .pirep-popup-age-expired { color: #dc3545; font-weight: bold; } 
         .header-urgent { color: #dc3545; }
         .header-routine { color: #0d6efd; }
 
@@ -67,6 +60,9 @@
         .btn-green { background: #198754; }
         .btn-blue  { background: #0d6efd; }
         .btn-red   { background: #dc3545; }
+
+        /* STATUS LINE */
+        #pirepStatus { font-size: 10px; color: #888; text-align: right; margin-top: 2px; }
 
         .wind-vector-icon { background: transparent; border: none; }
         .fix-label {
@@ -104,6 +100,7 @@
             <button onclick="window.togglePIREPs()" class="btn-red" id="btnPirep">✈️ Show PIREPs</button>
             <button onclick="window.openPrintView()" class="btn-blue">🖨️ Print View</button>
         </div>
+        <div id="pirepStatus">PIREP Data: Not Loaded</div>
         
         <div style="font-size:10px; color:#555; margin-top:10px;">
             Map: <span id="statusMap">Loading...</span> | CSV: <span id="statusCSV">Loading...</span>
