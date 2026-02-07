@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HCF Oceanic Winds + PIREPs</title>
+    <title>HCF Oceanic Winds Aloft Forecast</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
@@ -11,7 +11,6 @@
         body, html { margin: 0; padding: 0; height: 100%; background: #222; font-family: sans-serif; overflow: hidden; }
         #map { height: 100vh; width: 100vw; background: #222; }
         
-        /* UI Panel */
         .ui-overlay {
             position: absolute; bottom: 20px; left: 20px; z-index: 1000; width: 360px;
             background: rgba(30, 30, 30, 0.95); color: #ccc; padding: 15px; border-radius: 8px;
@@ -25,23 +24,37 @@
             min-height: 60px; max-height: 400px; overflow-y: auto;
         }
 
-        /* PIREP Marker Styles */
-        .pirep-marker {
-            background-color: #3388ff; /* Default Blue */
+        /* --- NEW PIREP STYLES --- */
+        .pirep-base {
             border: 2px solid white;
             border-radius: 50%;
             box-shadow: 0 0 4px black;
+            color: white;
+            text-align: center;
+            font-weight: 900;
+            font-size: 10px;
+            line-height: 14px; /* Vertically centers the "!" */
+            font-family: sans-serif;
         }
-        .pirep-urgent {
-            background-color: #ff3333 !important; /* Urgent Red */
-            animation: pulse 2s infinite;
+
+        .pirep-green { background-color: #28a745; } /* Fresh (<1h) */
+        .pirep-orange { background-color: #fd7e14; } /* Old (>1h) */
+        
+        .pirep-urgent { 
+            background-color: #dc3545; /* Red */
+            animation: pulse 1.5s infinite;
         }
 
         @keyframes pulse {
-            0% { box-shadow: 0 0 0 0 rgba(255, 51, 51, 0.7); }
-            70% { box-shadow: 0 0 0 10px rgba(255, 51, 51, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(255, 51, 51, 0); }
+            0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
+            70% { box-shadow: 0 0 0 6px rgba(220, 53, 69, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
         }
+
+        /* Popup Styles */
+        .pirep-popup-age-fresh { color: #28a745; font-weight: bold; }
+        .pirep-popup-age-old { color: #fd7e14; font-weight: bold; }
+        .pirep-popup-urgent { color: #dc3545; font-weight: bold; }
 
         .fix-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; border: 1px solid #333; }
         .fix-table th { background: #0d6efd; color: white; text-align: left; padding: 4px; }
@@ -79,7 +92,7 @@
     <div id="map"></div>
 
     <div class="ui-overlay">
-        <h3>HCF Oceanic Winds + PIREPs</h3>
+        <h3>HCF Oceanic Winds Aloft Forecast</h3>
         
         <label>Map Display Altitude</label>
         <select id="altitudeSelect" onchange="window.updateMapLayer()">
@@ -91,9 +104,9 @@
         <div id="reportBox" class="report-box">Initializing...</div>
         
         <div style="display:flex; gap:5px; margin-top:5px;">
-            <button onclick="window.runBulkReport()" class="btn-green">Refresh Winds</button>
+            <button onclick="window.runBulkReport()" class="btn-green">Refresh All Levels</button>
             <button onclick="window.togglePIREPs()" class="btn-red" id="btnPirep">✈️ Show PIREPs</button>
-            <button onclick="window.openPrintView()" class="btn-blue">🖨️ Print</button>
+            <button onclick="window.openPrintView()" class="btn-blue">🖨️ Print View</button>
         </div>
         
         <div style="font-size:10px; color:#555; margin-top:10px;">
@@ -104,7 +117,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
 
-<script>
+    <script>
         // ================= CONFIGURATION =================
         const MAP_IMAGE = 'map.png';
         const MAP_PGW   = 'map.pgw';
@@ -149,7 +162,6 @@
         proj4.defs("EPSG:3857","+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext  +no_defs");
         const map = L.map('map', { center: [21.0, -157.0], zoom: 6, crs: L.CRS.EPSG3857 });
 
-        // Layers
         let windLayer = L.layerGroup().addTo(map);
         let pirepLayer = L.layerGroup(); 
 
@@ -256,7 +268,7 @@
             } catch(e) { document.getElementById('reportBox').innerText = "API Error: " + e; }
         };
 
-    // --- FETCH PIREP LOGIC (READS LOCAL JSON) ---
+        // --- FETCH PIREP LOGIC (READS LOCAL JSON) ---
         window.togglePIREPs = async function() {
             const btn = document.getElementById('btnPirep');
             
@@ -267,28 +279,22 @@
             } else {
                 btn.innerText = "⏳ Loading...";
                 
-                // 1. Fetch the local file generated by Python
-                // 2. Add timestamp (?t=...) to force browser to get the newest version
                 const targetUrl = `pireps.json?t=${Date.now()}`;
                 
                 try {
                     const resp = await fetch(targetUrl);
-                    
-                    if (!resp.ok) {
-                        throw new Error(`Data file missing (${resp.status}). GitHub Action may not have run yet.`);
-                    }
-                    
+                    if (!resp.ok) throw new Error("Missing pireps.json");
                     const data = await resp.json();
                     
                     if (!data.features || data.features.length === 0) {
-                        alert("No PIREPs found within 250NM of PHNL right now.");
+                        alert("No PIREPs found.");
                         btn.innerText = "✈️ Show PIREPs";
                         return;
                     }
                     
                     pirepLayer.clearLayers();
 
-                    // Visual Range Ring (250 NM)
+                    // Range Ring
                     L.circle([21.318, -157.922], {
                         color: 'rgba(255, 255, 255, 0.3)',
                         fillColor: 'transparent',
@@ -299,24 +305,49 @@
 
                     L.geoJSON(data, {
                         pointToLayer: function (feature, latlng) {
-                            const isUrgent = feature.properties.type === 'UUA';
-                            const colorClass = isUrgent ? 'pirep-urgent' : 'pirep-marker';
+                            const p = feature.properties;
+                            const isUrgent = p.type === 'UUA';
                             
+                            // Check for ATC Solicitation Criteria in Raw Text
+                            // Includes: Moderate+ Turb, Light+ Icing, Thunderstorms, Wind Shear, Volcanic Ash
+                            const raw = (p.rawOb || "").toUpperCase();
+                            const needsSolicit = /(TB|TURB).*(MDT|SEV|EXTRM)|(IC|ICG).*(LGT|MOD|SEV)|TS|LLWS|VA/.test(raw) || isUrgent;
+                            
+                            const symbol = needsSolicit ? '!' : '';
+                            
+                            // Color Logic
+                            let colorClass = 'pirep-green'; // Default Fresh
+                            if (isUrgent) {
+                                colorClass = 'pirep-urgent'; // Red Pulse
+                            } else if (p.age > 60) {
+                                colorClass = 'pirep-orange'; // Old (>1h)
+                            }
+                            // Else stays green
+
                             return L.marker(latlng, {
                                 icon: L.divIcon({
-                                    className: colorClass,
-                                    iconSize: [12, 12],
-                                    iconAnchor: [6, 6]
+                                    className: `pirep-base ${colorClass}`,
+                                    html: symbol,
+                                    iconSize: [14, 14],
+                                    iconAnchor: [7, 7]
                                 })
                             });
                         },
                         onEachFeature: function (feature, layer) {
                             const p = feature.properties;
+                            
+                            // Popup Color Logic
+                            let ageClass = 'pirep-popup-age-fresh';
+                            if (p.age > 60) ageClass = 'pirep-popup-age-old';
+                            
+                            // Urgency Label
+                            let typeLabel = `<span style="color:${p.type === 'UUA' ? '#dc3545' : '#0d6efd'}">${p.type} PIREP</span>`;
+                            
                             const popupContent = `
                                 <div style="font-family:monospace; font-size:12px; color:black; min-width: 200px;">
-                                    <strong style="color:${p.type === 'UUA' ? 'red' : 'blue'}">${p.type} PIREP</strong><br>
+                                    ${typeLabel}<br>
                                     <span style="color:#555;">Alt: ${p.alt > 0 ? p.alt + 'ft' : 'Unknown'}</span><br>
-                                    <span style="color:#777; font-size:10px;">Age: ${p.age} min</span>
+                                    <span class="${ageClass}">Age: ${p.age} min</span>
                                     <hr style="margin:4px 0; border:0; border-top:1px solid #ccc;">
                                     ${p.rawOb || "No raw text"}
                                 </div>
@@ -330,8 +361,8 @@
                     btn.innerText = "Hide PIREPs";
                     
                 } catch(e) {
-                    console.error("PIREP Load Error:", e);
-                    alert(`Could not load PIREPs.\n\nReason: ${e.message}\n\nIf you just set this up, wait 5 minutes for the GitHub Action to run.`);
+                    console.error(e);
+                    alert("Could not load PIREPs. Wait for GitHub Action.");
                     btn.innerText = "✈️ Show PIREPs";
                 }
             }
@@ -483,4 +514,3 @@
     </script>
 </body>
 </html>
-
