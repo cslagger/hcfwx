@@ -24,7 +24,6 @@ const LEVELS = [
     { id: '100hPa', label: 'FL 530' }
 ];
 
-// Initialize Dropdown
 const sel = document.getElementById('altitudeSelect');
 LEVELS.forEach(l => {
     const opt = document.createElement('option');
@@ -33,14 +32,11 @@ LEVELS.forEach(l => {
     sel.appendChild(opt);
 });
 
-// ================= GLOBALS =================
 window.WAYPOINTS = [];
 window.FULL_DATASET = [];
 window.CURRENT_HOUR = 0;
 const MAG_VAR = 9;
 
-// --- MAP SETUP ---
-// Define Projection
 if(typeof proj4 !== 'undefined') {
     proj4.defs("EPSG:3857","+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext  +no_defs");
 }
@@ -50,7 +46,6 @@ const map = L.map('map', { center: [21.0, -157.0], zoom: 6, crs: L.CRS.EPSG3857 
 let windLayer = L.layerGroup().addTo(map);
 let pirepLayer = L.layerGroup(); 
 
-// --- INITIALIZATION ---
 (async function initMap() {
     try {
         const resp = await fetch(MAP_PGW);
@@ -114,7 +109,6 @@ function parseDMS(dmsStr) {
     return val;
 }
 
-// --- FETCH WIND LOGIC ---
 window.runBulkReport = async function() {
     if(!window.WAYPOINTS.length) return;
     document.getElementById('reportBox').innerHTML = "<div style='color:orange'>Fetching ALL altitude data...</div>";
@@ -154,24 +148,20 @@ window.runBulkReport = async function() {
     } catch(e) { document.getElementById('reportBox').innerText = "API Error: " + e; }
 };
 
-// --- HELPER: PARSE PIREP CONDITIONS ---
 function getPirepConditions(raw) {
     if (!raw) return "Flight Info";
     const r = raw.toUpperCase();
     let c = [];
-    
     if (r.includes("LLWS")) c.push("Wind Shear");
     if (r.includes("TS") || r.includes("TSRA")) c.push("Thunderstorm");
     if (r.includes("VA")) c.push("Volcanic Ash");
     if (/TB|TURB/.test(r)) c.push("Turbulence");
     if (/IC|ICG/.test(r)) c.push("Icing");
     if ((/OVC|BKN|SCT|FEW|SK/.test(r)) && c.length === 0) c.push("Sky Condition");
-    
     if (c.length === 0) return "Routine Report";
     return c.join(", ");
 }
 
-// --- HELPER: EXTRACT TIME & AGE ---
 function getPirepTimeData(raw) {
     const match = raw && raw.match(/(?:^|[\s/])TM\s+(\d{4})/);
     if (!match) return { displayTime: "N/A", age: null };
@@ -193,7 +183,6 @@ function getPirepTimeData(raw) {
     return { displayTime: `${timeStr}Z`, age: ageMin >= 0 ? ageMin : 0 };
 }
 
-// --- FETCH PIREP LOGIC ---
 window.togglePIREPs = async function() {
     const btn = document.getElementById('btnPirep');
     
@@ -235,8 +224,15 @@ window.togglePIREPs = async function() {
                     const age = timeData.age !== null ? timeData.age : p.age; 
                     
                     let colorClass = 'pirep-green'; 
-                    if (isUrgent) { colorClass = 'pirep-urgent'; } 
-                    else if (age > 60) { colorClass = 'pirep-orange'; }
+                    
+                    if (isUrgent) { 
+                        colorClass = 'pirep-urgent'; 
+                    } else if (age > 90) {
+                        colorClass = 'pirep-grey';   // NEW: Grey for > 90m
+                    } else if (age > 60) {
+                        colorClass = 'pirep-orange'; // Orange for 60-90m
+                    }
+                    // Default is green (<60m)
 
                     return L.marker(latlng, {
                         icon: L.divIcon({
@@ -250,8 +246,14 @@ window.togglePIREPs = async function() {
                     const conditionText = getPirepConditions(p.rawOb);
                     const timeData = getPirepTimeData(p.rawOb);
                     const age = timeData.age !== null ? timeData.age : p.age;
+                    
                     let ageClass = 'pirep-popup-age-fresh';
-                    if (age > 60) ageClass = 'pirep-popup-age-old';
+                    if (age > 90) {
+                        ageClass = 'pirep-popup-age-expired'; // NEW: Red Text
+                    } else if (age > 60) {
+                        ageClass = 'pirep-popup-age-old';
+                    }
+                    
                     const headerClass = p.type === 'UUA' ? 'header-urgent' : 'header-routine';
 
                     const popupContent = `
@@ -283,11 +285,9 @@ window.togglePIREPs = async function() {
     }
 };
 
-// --- RENDER SIDEBAR ---
 function renderReport() {
     const reportBox = document.getElementById('reportBox');
     reportBox.innerHTML = "";
-    
     const now = new Date();
     const timeStr = `${String(now.getUTCHours()).padStart(2,'0')}${String(now.getUTCMinutes()).padStart(2,'0')}Z`;
     reportBox.innerHTML += `<div style="color:#0f0; margin-bottom:10px; font-weight:bold;">RETRIEVED: ${timeStr}</div>`;
@@ -296,7 +296,6 @@ function renderReport() {
     window.FULL_DATASET.forEach(data => {
         let html = `<table class="fix-table">
             <thead><tr><th colspan="2">${data.wp.name}</th></tr></thead><tbody>`;
-
         LEVELS.forEach(l => {
             const idx = Math.min(window.CURRENT_HOUR, data.levels[l.id].speeds.length-1);
             const k = Math.round(data.levels[l.id].speeds[idx] * 0.539957);
@@ -309,12 +308,10 @@ function renderReport() {
     });
 }
 
-// --- UPDATE MAP ---
 window.updateMapLayer = function() {
     const altID = document.getElementById('altitudeSelect').value;
     renderReport(); 
     windLayer.clearLayers(); 
-
     window.FULL_DATASET.forEach(d => {
         if (!d.levels[altID]) return;
         const idx = Math.min(window.CURRENT_HOUR, d.levels[altID].speeds.length-1);
@@ -323,22 +320,11 @@ window.updateMapLayer = function() {
         const svg = getBarbSVG(k, '#00bfff');
         const rotation = dir;
         const windStr = formatAv(dir, k);
-
-        const html = `
-            <div style="position:relative; width:45px; height:45px;">
-                <div class="fix-label">${d.wp.name}</div>
-                <div style="transform: rotate(${rotation}deg); transform-origin: 22.5px 45px; width:45px; height:45px;">${svg}</div>
-                <div class="vector-label">${windStr}</div>
-            </div>`;
-
-        L.marker([d.wp.lat, d.wp.lon], { 
-            zIndexOffset: 1000, 
-            icon: L.divIcon({ className: 'wind-vector-icon', html: html, iconSize: [45, 45], iconAnchor: [22.5, 45] })
-        }).addTo(windLayer);
+        const html = `<div style="position:relative; width:45px; height:45px;"><div class="fix-label">${d.wp.name}</div><div style="transform: rotate(${rotation}deg); transform-origin: 22.5px 45px; width:45px; height:45px;">${svg}</div><div class="vector-label">${windStr}</div></div>`;
+        L.marker([d.wp.lat, d.wp.lon], { zIndexOffset: 1000, icon: L.divIcon({ className: 'wind-vector-icon', html: html, iconSize: [45, 45], iconAnchor: [22.5, 45] }) }).addTo(windLayer);
     });
 };
 
-// --- UTILS & PRINT ---
 window.updateTime = (v) => { window.CURRENT_HOUR = parseInt(v); document.getElementById('timeLabel').innerText = v; window.updateMapLayer(); };
 function formatAv(d,k) { let m = Math.round(d-MAG_VAR); if(m<0)m+=360; if(m>=360)m-=360; return `${String(m).padStart(3,'0')}°${String(k).padStart(3,'0')}KT`; }
 
