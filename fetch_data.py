@@ -8,15 +8,14 @@ import re
 from datetime import datetime, timezone
 from bs4 import BeautifulSoup
 
-# --- PIREP CONFIGURATION ---
+# --- CONFIGURATION ---
 PIREP_SOURCE = "https://aviationweather.gov/data/cache/aircraftreports.cache.xml.gz"
+HF_PAGE_URL = "https://radio.arinc.net/pacific/"
 PHNL_LAT, PHNL_LON = 21.318, -157.922
 MAX_DIST_NM = 250
 MAX_AGE_MIN = 90
 
-# --- HF CONFIGURATION ---
-HF_PAGE_URL = "https://radio.arinc.net/pacific/"
-
+# --- PIREP FUNCTIONS ---
 def haversine_distance(lat1, lon1, lat2, lon2):
     R = 3440.065
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
@@ -31,10 +30,9 @@ def fetch_pireps():
     try:
         response = requests.get(PIREP_SOURCE, timeout=60)
         response.raise_for_status()
-        
         with gzip.GzipFile(fileobj=io.BytesIO(response.content)) as f:
             xml_content = f.read()
-            
+        
         root = ET.fromstring(xml_content)
         features = []
         now_utc = datetime.now(timezone.utc)
@@ -59,89 +57,92 @@ def fetch_pireps():
                     "type": "Feature",
                     "geometry": {"type": "Point", "coordinates": [lon, lat]},
                     "properties": {
-                        "type": report_type,
-                        "rawOb": raw_text,
-                        "alt": alt,
-                        "age": round(age_min, 1)
+                        "type": report_type, "rawOb": raw_text, "alt": alt, "age": round(age_min, 1)
                     }
                 })
             except: continue
 
-        output = {
-            "generated_at": now_utc.strftime("%H%MZ %m/%d/%y"),
-            "type": "FeatureCollection",
-            "features": features
-        }
-        
-        with open("pireps.json", "w") as f:
-            json.dump(output, f)
+        output = {"generated_at": now_utc.strftime("%H%MZ %m/%d/%y"), "type": "FeatureCollection", "features": features}
+        with open("pireps.json", "w") as f: json.dump(output, f)
         print(f"✅ Saved {len(features)} PIREPs.")
-        
-    except Exception as e:
-        print(f"❌ PIREP Error: {e}")
+    except Exception as e: print(f"❌ PIREP Error: {e}")
 
+# --- HF FREQUENCY FUNCTIONS ---
 def clean_text(text):
-    """Remove extra whitespace and newlines."""
     return " ".join(text.split())
 
 def fetch_hf():
-    print("Fetching HF Frequencies (HTML Scraping)...")
+    print("Fetching HF Frequencies (Header-Table Match)...")
     try:
-        # 1. Fetch HTML with User-Agent to avoid blocking
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
+        headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(HF_PAGE_URL, headers=headers, timeout=30)
         response.raise_for_status()
         
         soup = BeautifulSoup(response.content, 'html.parser')
         
+        # Data Structure
         data = {
             "hwn_cal_major": [], "hwn_cal_other": [], "hwn_pacnw": [],
             "hwn_south": [], "hwn_alaska": [], "hwn_west": [], "notes": []
         }
 
-        # 2. Iterate over ALL tables to find data
-        tables = soup.find_all('table')
+        # Strategy: Find all Headers (h2, h3, h4, or strong/b tags)
+        # Then check the *next* table that appears after them.
+        elements = soup.find_all(['h2', 'h3', 'h4', 'h5', 'strong', 'b', 'p'])
         
-        for table in tables:
-            rows = table.find_all('tr')
+        current_category = None
+        
+        for el in elements:
+            text = clean_text(el.get_text()).upper()
+            
+            # Identify Category based on Header Text
+            if "CALIFORNIA" in text: current_category = "CAL"
+            elif "PACIFIC NW" in text or "PAC NW" in text: current_category = "PACNW"
+            elif "SOUTHBOUND" in text: current_category = "SOUTH"
+            elif "ALASKA" in text: current_category = "ALASKA"
+            elif "WESTBOUND" in text: current_category = "WEST"
+            elif "NOTE" in text: current_category = "NOTE"
+            else: continue # Not a header we care about
+            
+            # Find the next table
+            next_table = el.find_next('table')
+            if not next_table: continue
+            
+            # Parse the table rows
+            rows = next_table.find_all('tr')
             for row in rows:
-                cols = row.find_all(['td', 'th'])
+                cols = [clean_text(c.get_text()) for c in row.find_all(['td', 'th'])]
                 if not cols: continue
                 
-                # Extract text from columns
-                row_text = [clean_text(c.get_text()) for c in cols]
-                full_line = " | ".join(row_text)
-                header = row_text[0].upper()
+                full_line = " | ".join(cols)
                 
-                # Logic to categorize rows
-                if "CALIFORNIA" in header:
-                    if any(x in header for x in ["AAL", "DAL", "ACA", "WJA", "MILITARY"]):
+                # Assign to correct JSON key
+                if current_category == "CAL":
+                    if any(x in full_line.upper() for x in ["AAL", "DAL", "ACA", "WJA", "MILITARY"]):
                         data["hwn_cal_major"].append(full_line)
                     else:
                         data["hwn_cal_other"].append(full_line)
-                
-                elif "PAC NW" in header or "PACIFIC NW" in header:
+                elif current_category == "PACNW":
                     data["hwn_pacnw"].append(full_line)
-                
-                elif "SOUTHBOUND" in header:
+                elif current_category == "SOUTH":
                     data["hwn_south"].append(full_line)
-                
-                elif "ALASKA" in header:
+                elif current_category == "ALASKA":
                     data["hwn_alaska"].append(full_line)
-                
-                elif "WESTBOUND" in header:
+                elif current_category == "WEST":
                     data["hwn_west"].append(full_line)
-                
-                elif "NOTE" in header:
+                elif current_category == "NOTE":
                     data["notes"].append(full_line)
 
-        # 3. Save to JSON
+        # Remove Duplicates (sometimes headers repeat)
+        for k in data:
+            data[k] = list(set(data[k]))
+
         with open("hf_freqs.json", "w") as f:
             json.dump(data, f)
             
         print(f"✅ Saved HF Frequencies.")
+        # Debug print
+        print(f"DEBUG Sample: {str(data)[:200]}...")
 
     except Exception as e:
         print(f"❌ HF Error: {e}")
