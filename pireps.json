@@ -1,1 +1,1 @@
-{"generated_at": "1545Z 02/21/26", "type": "FeatureCollection", "features": []}
+{"generated_at": "1558Z 02/21/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-157.8471, 21.2785]}, "properties": {"type": "PIREP", "rawOb": "HNL UA /OV HNL100005/TM 1535/FL027/TP C208/SK SCT027/WX -RA/TB NEG", "alt": 2700, "age": 23.3}}]}
