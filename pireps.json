@@ -1,1 +1,1 @@
-{"generated_at": "1029Z 03/09/26", "type": "FeatureCollection", "features": []}
+{"generated_at": "1108Z 03/09/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-158.0628, 23.0509]}, "properties": {"type": "PIREP", "rawOb": "HNL UA /OV HNL345105/TM 1030/FL340/TP B789/TB LGT TO OCNL MOD CHOP", "alt": 34000, "age": 38.5}}]}
