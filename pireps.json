@@ -1,1 +1,1 @@
-{"generated_at": "1134Z 03/20/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-155.1275, 22.1786]}, "properties": {"type": "PIREP", "rawOb": "HNL UA /OV HNL060165/TM 1006/FL370/TP A332/TB MOD CHOP 310, LIGHT CHOP 320-370", "alt": 37000, "age": 88.9}}]}
+{"generated_at": "1156Z 03/20/26", "type": "FeatureCollection", "features": []}
