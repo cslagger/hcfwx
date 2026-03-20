@@ -1,1 +1,1 @@
-{"generated_at": "0903Z 03/20/26", "type": "FeatureCollection", "features": []}
+{"generated_at": "0954Z 03/20/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-156.1333, 22.05]}, "properties": {"type": "AIREP", "rawOb": "ARP UAL1169 2203N 15608W 0843 F308 277/045 TB CONT LGT TURB OCNL MOD TURB IC", "alt": 30800, "age": 71.2}}]}
