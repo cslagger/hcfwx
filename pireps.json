@@ -1,1 +1,1 @@
-{"generated_at": "1158Z 03/21/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-156.7028, 22.5495]}, "properties": {"type": "PIREP", "rawOb": "HNL UA /OV OGG340100/TM 1050/FL350/TP B772/TB CONT MOD TURB", "alt": 35000, "age": 68.7}}]}
+{"generated_at": "1243Z 03/21/26", "type": "FeatureCollection", "features": []}
