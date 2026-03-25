@@ -1,1 +1,1 @@
-{"generated_at": "1150Z 03/25/26", "type": "FeatureCollection", "features": []}
+{"generated_at": "1233Z 03/25/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-159.8667, 18.75]}, "properties": {"type": "AIREP", "rawOb": "ARP UAL60 1845N 15952W 1205 F360 TB MODERATE SK CLEAR IC NONE", "alt": 36000, "age": 28.8}}]}
