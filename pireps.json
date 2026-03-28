@@ -1,1 +1,1 @@
-{"generated_at": "1157Z 03/28/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-153.75, 21.5]}, "properties": {"type": "AIREP", "rawOb": "ARP UAL61 2130N 15345W 1120 F390 268/116KT TB SMTH IC", "alt": 39000, "age": 37.8}}]}
+{"generated_at": "1243Z 03/28/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-153.75, 21.5]}, "properties": {"type": "AIREP", "rawOb": "ARP UAL61 2130N 15345W 1120 F390 268/116KT TB SMTH IC", "alt": 39000, "age": 83.9}}]}
