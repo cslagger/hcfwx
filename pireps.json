@@ -1,1 +1,1 @@
-{"generated_at": "0950Z 03/30/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-156.3896, 22.5699]}, "properties": {"type": "PIREP", "rawOb": "HNL UA /OV OGG350100/TM 0827/FL360/TP B772/TB MOD BTN FL270-FL350 ", "alt": 36000, "age": 83.3}}]}
+{"generated_at": "1050Z 03/30/26", "type": "FeatureCollection", "features": []}
