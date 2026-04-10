@@ -1,1 +1,1 @@
-{"generated_at": "0910Z 04/10/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-156.4721, 20.8384]}, "properties": {"type": "PIREP", "rawOb": "OGG UA /OV OGG204005/TM 0751/FL020/TP B38M/SK SCT090/WX 10SM/TB SMOOTH/RM ASA483, B38M, RNAV Z APPROACH RWY2, REPORTED BROKE OUT OF 9000, RIDE IS SMOOTH", "alt": 2000, "age": 79.5}}]}
+{"generated_at": "0941Z 04/10/26", "type": "FeatureCollection", "features": []}
