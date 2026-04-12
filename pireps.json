@@ -1,1 +1,1 @@
-{"generated_at": "0949Z 04/12/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-156.4312, 20.8929]}, "properties": {"type": "PIREP", "rawOb": "OGG UA /OV OGG204001/TM 0820/FL004/TP B737/RM BROKE OUT AT 400 FINAL RWY 2", "alt": 400, "age": 89.1}}]}
+{"generated_at": "1005Z 04/12/26", "type": "FeatureCollection", "features": []}
