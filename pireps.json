@@ -1,1 +1,1 @@
-{"generated_at": "1003Z 04/19/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-159.209, 22.0808]}, "properties": {"type": "PIREP", "rawOb": "LIH UA /OV LIH035010/TM 0850/FL040/TP B737/SK SKC/WX 10/TB LIGHT CHOP", "alt": 4000, "age": 73.1}}]}
+{"generated_at": "1021Z 04/19/26", "type": "FeatureCollection", "features": []}
