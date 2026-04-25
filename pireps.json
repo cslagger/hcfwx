@@ -1,1 +1,1 @@
-{"generated_at": "0832Z 04/25/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-155.0974, 19.9038]}, "properties": {"type": "PIREP", "rawOb": "ITO UA /OV ITO325012/TM 0723/FL060/TP B712/SK SCT022 TOPS060", "alt": 6000, "age": 69.6}}]}
+{"generated_at": "0854Z 04/25/26", "type": "FeatureCollection", "features": []}
