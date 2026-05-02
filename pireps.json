@@ -1,1 +1,1 @@
-{"generated_at": "1624Z 05/02/26", "type": "FeatureCollection", "features": []}
+{"generated_at": "1643Z 05/02/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-156.3422, 20.1307]}, "properties": {"type": "PIREP", "rawOb": "KOA UA /OV KOA315030/TM 1629/FL075/TP B38M/SK CLR", "alt": 7500, "age": 14.5}}]}
