@@ -1,1 +1,1 @@
-{"generated_at": "1037Z 05/17/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-156.4167, 25.2]}, "properties": {"type": "AIREP", "rawOb": "ARP WJA1851 2512N 15625W 0951 F350 MS45 318/037KT", "alt": 35000, "age": 46.2}}]}
+{"generated_at": "1103Z 05/17/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-156.4167, 25.2]}, "properties": {"type": "AIREP", "rawOb": "ARP WJA1851 2512N 15625W 0951 F350 MS45 318/037KT", "alt": 35000, "age": 72.0}}]}
