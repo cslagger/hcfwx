@@ -1,1 +1,1 @@
-{"generated_at": "0846Z 05/21/26", "type": "FeatureCollection", "features": []}
+{"generated_at": "1005Z 05/21/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-156.3167, 24.05]}, "properties": {"type": "AIREP", "rawOb": "ARP ATN9701 2403N 15619W 0917 F390 MS56 317/032KT", "alt": 39000, "age": 48.8}}]}
