@@ -1,1 +1,1 @@
-{"generated_at": "0812Z 05/24/26", "type": "FeatureCollection", "features": []}
+{"generated_at": "0906Z 05/24/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-156.3003, 20.7027]}, "properties": {"type": "PIREP", "rawOb": "OGG UA /OV OGG140014/TM 0746/FL250/TP B712/TB MOD CHOP", "alt": 25000, "age": 80.9}}]}
