@@ -1,1 +1,1 @@
-{"generated_at": "1139Z 05/28/26", "type": "FeatureCollection", "features": []}
+{"generated_at": "1248Z 05/28/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-157.7808, 21.1013]}, "properties": {"type": "PIREP", "rawOb": "HNL UA /OV 15 SE HNL/TM 1150/FL090/TP B733/SK SCT046 TOPS064/TB SMOOTH SO FAR ", "alt": 9000, "age": 58.8}}]}
