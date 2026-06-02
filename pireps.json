@@ -1,1 +1,1 @@
-{"generated_at": "1121Z 06/02/26", "type": "FeatureCollection", "features": []}
+{"generated_at": "1238Z 06/02/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-160.8167, 18.4]}, "properties": {"type": "AIREP", "rawOb": "ARP DAL11 1824N 16049W 1149 F340 304/054KT TB SMOOTH", "alt": 34000, "age": 49.3}}]}
