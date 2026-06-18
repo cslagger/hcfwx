@@ -1,1 +1,1 @@
-{"generated_at": "1603Z 06/18/26", "type": "FeatureCollection", "features": []}
+{"generated_at": "1714Z 06/18/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-155.0817, 19.7225]}, "properties": {"type": "PIREP", "rawOb": "ITO UA /OV ITO260004/TM 1607/FL006/TP B712/SK SCT006/TB SMOOTH RIDE ", "alt": 600, "age": 67.9}}]}
