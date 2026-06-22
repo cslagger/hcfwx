@@ -1,1 +1,1 @@
-{"generated_at": "0126Z 06/22/26", "type": "FeatureCollection", "features": []}
+{"generated_at": "0220Z 06/22/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-154.65, 23.0]}, "properties": {"type": "AIREP", "rawOb": "ARP UAL650 2300N 15439W 0153 F350 MS47 300/020KT", "alt": 35000, "age": 27.6}}]}
