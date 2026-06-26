@@ -1,1 +1,1 @@
-{"generated_at": "1555Z 06/26/26", "type": "FeatureCollection", "features": []}
+{"generated_at": "1635Z 06/26/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-156.4194, 20.9897]}, "properties": {"type": "PIREP", "rawOb": "OGG UA /OV OGG350005/TM 1605/FL020/TP B712/TB LGT CHOP", "alt": 2000, "age": 30.5}}]}
