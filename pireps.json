@@ -1,1 +1,1 @@
-{"generated_at": "1337Z 07/01/26", "type": "FeatureCollection", "features": []}
+{"generated_at": "1432Z 07/01/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-155.0048, 20.0541]}, "properties": {"type": "PIREP", "rawOb": "ITO UA /OV ITO350020/TM 1337/FL110/TP PC12/WX RA/TB MOD CHOP", "alt": 11000, "age": 55.5}}]}
