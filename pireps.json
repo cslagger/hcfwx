@@ -1,1 +1,1 @@
-{"generated_at": "1503Z 07/14/26", "type": "FeatureCollection", "features": []}
+{"generated_at": "1538Z 07/14/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-159.3359, 21.7893]}, "properties": {"type": "PIREP", "rawOb": "LIH UA /OV MORKE/TM 1507/FL027/TP B763/SK BKN030", "alt": 2700, "age": 31.3}}]}
