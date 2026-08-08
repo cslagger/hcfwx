@@ -1,1 +1,1 @@
-{"generated_at": "1334Z 08/08/26", "type": "FeatureCollection", "features": []}
+{"generated_at": "1408Z 08/08/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-154.65, 23.0]}, "properties": {"type": "AIREP", "rawOb": "ARP ATN3369 2300N 15439W 1336 F370 MS48 233/027KT", "alt": 37000, "age": 32.3}}]}
