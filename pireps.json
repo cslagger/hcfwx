@@ -1,1 +1,1 @@
-{"generated_at": "0852Z 08/12/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-156.4167, 25.2]}, "properties": {"type": "AIREP", "rawOb": "ARP ASA880 2512N 15625W 0839 F330 MS39 213/031KT", "alt": 33000, "age": 13.5}}]}
+{"generated_at": "0949Z 08/12/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-156.4167, 25.2]}, "properties": {"type": "AIREP", "rawOb": "ARP ASA880 2512N 15625W 0839 F330 MS39 213/031KT", "alt": 33000, "age": 70.6}}]}
