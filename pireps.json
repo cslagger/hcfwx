@@ -1,1 +1,1 @@
-{"generated_at": "2214Z 08/20/26", "type": "FeatureCollection", "features": []}
+{"generated_at": "2244Z 08/20/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-156.9166, 20.8318]}, "properties": {"type": "PIREP", "rawOb": "LNY UA /OV LNY025005/TM 2208/FL020/TP C408/SK SCT012", "alt": 2000, "age": 36.6}}]}
