@@ -1,1 +1,1 @@
-{"generated_at": "0243Z 08/22/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-157.1372, 20.8186]}, "properties": {"type": "PIREP", "rawOb": "LNY UA /OV LNY278010/TM 0201/FL060/TP C172/SK BKN035", "alt": 6000, "age": 42.1}}]}
+{"generated_at": "0324Z 08/22/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-157.1372, 20.8186]}, "properties": {"type": "PIREP", "rawOb": "LNY UA /OV LNY278010/TM 0201/FL060/TP C172/SK BKN035", "alt": 6000, "age": 83.6}}]}
