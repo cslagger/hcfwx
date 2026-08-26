@@ -1,1 +1,1 @@
-{"generated_at": "1137Z 08/26/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-154.8, 23.8667]}, "properties": {"type": "AIREP", "rawOb": "ARP UAL863 2352N 15448W 1027 F360 MS44 262/039KT TB NONE SK CLEAR IC NONE", "alt": 36000, "age": 70.4}}]}
+{"generated_at": "1159Z 08/26/26", "type": "FeatureCollection", "features": []}
