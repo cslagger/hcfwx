@@ -1,1 +1,1 @@
-{"generated_at": "1050Z 09/27/26", "type": "FeatureCollection", "features": []}
+{"generated_at": "1521Z 09/27/26", "type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-156.1631, 19.5318]}, "properties": {"type": "PIREP", "rawOb": "KOA UA /OV KOA200013/TM 1444/FL050/TP PC12/TB LGT BLO 050/LGTCHOP 060-170 ", "alt": 5000, "age": 37.4}}]}
